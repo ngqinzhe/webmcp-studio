@@ -8,7 +8,11 @@ The [hackathon development brief](docs/project-brief.md) is the planning referen
 
 The code and setup below are the current extension prototype, described in the [extension design](docs/superpowers/specs/2026-08-28-webmcp-polyfill-design.md). The complete Studio workflow and native ChatGPT compatibility remain to be proven. Begin with gates **G1–G3** in the brief; mocked WebMCP tests or inspector invocation alone do not validate the complete browser connection.
 
-The [August 28 feasibility report](docs/feasibility/2026-08-28.md) records real native shared-authoring and execution-runtime calls in Codex, including a verified registration-removal fix. The chosen ChatGPT setup, selected local-tab bridge, and extension-injected tool consumption remain open.
+The [August 28 feasibility report](docs/feasibility/2026-08-28.md) records real native shared-authoring and execution-runtime calls in Codex, including a verified registration-removal fix. The [installed-extension follow-up](docs/feasibility/installed-extension-2026-08-29.md) verifies Chrome registration, page-mediated native execution, tab effects, and DOM-driven removal/restoration across the actual extension boundary. The chosen ChatGPT setup, selected local-tab bridge, and agent-native consumption of injected tools remain open.
+
+The [pre-build blocker audit](docs/feasibility/blocker-audit-2026-08-28.md) records the remaining compatibility, safety, and submission gates, with reproducible synthetic checks. Do not use this prototype for authenticated or consequential workflows until its retry, redaction, session, and approval controls are addressed.
+
+The [Chrome agent-bridge investigation](docs/feasibility/chrome-agent-bridge-2026-08-29.md) isolates the current native-consumption failure to the tested agent connection: both page-provided and extension-provided tools fail capability acquisition. It records the supported-product evidence and the remaining desktop ChatGPT Work comparison; it does not claim that every ChatGPT setup is unsupported.
 
 ## Run
 
@@ -40,6 +44,8 @@ npm run format:check
 Run `npm run spike:native` and open `http://127.0.0.1:4174/` in a browser with native Site tools. This small shared-draft fixture never mocks `document.modelContext`. The separate `/target.html` page starts without page-provided tools. See the [reproduction steps and limitations](docs/feasibility/2026-08-28.md) before treating a result as native compatibility evidence.
 
 To test the existing scanner, compiler, message bridge, and DOM executor against native tools, run `node spikes/native-runtime/serve.mjs` and open `http://127.0.0.1:4175/`. This component fixture runs both runtime halves in one page world; it does not install or validate the MV3 extension.
+
+With the extension manually loaded, run `node spikes/installed-extension/serve.mjs` and open `http://127.0.0.1:4176/` for the [installed-extension diagnostic](docs/feasibility/installed-extension-2026-08-29.md). It invokes the public browser API through visible buttons and does not register or mock tools. This verifies installed components, not native agent consumption.
 
 ## Adapters
 

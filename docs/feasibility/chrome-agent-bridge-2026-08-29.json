@@ -1,0 +1,145 @@
+{
+  "startedAt": "2026-08-28T16:36:38.686Z",
+  "browser": "Existing supported Chrome connection; no profile or settings changes",
+  "browserTransportWorking": true,
+  "probes": [
+    {
+      "kind": "page-provided-authoring-tools",
+      "url": "http://127.0.0.1:4174/",
+      "observedAt": "2026-08-28T16:36:50.756Z",
+      "visible": {
+        "environmentText": "{\n  \"origin\": \"http://127.0.0.1:4174\",\n  \"userAgent\": \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36\",\n  \"secureContext\": true,\n  \"topLevel\": true,\n  \"modelContextPresent\": true,\n  \"registerTool\": \"function\",\n  \"unregisterTool\": \"undefined\",\n  \"apiMockedByFixture\": false,\n  \"extensionBridgeImplemented\": false\n}",
+        "eventText": "",
+        "nativeStatus": "Registered 3 tools with the browser-provided API. Registration alone is not invocation proof.",
+        "revision": "0"
+      },
+      "nativeAgentCapability": {
+        "available": false,
+        "error": "Error: Capability is not available: webmcp"
+      }
+    },
+    {
+      "kind": "extension-provided-tool",
+      "url": "http://127.0.0.1:4176/?marker=connector-probe",
+      "observedAt": "2026-08-28T16:37:59.358Z",
+      "visible": {
+        "environmentText": "{\n  \"evidence\": \"Installed-extension/native-browser-API component diagnostic only\",\n  \"nativeAgentInvocation\": false,\n  \"fixtureRegistersTools\": false,\n  \"fixtureMocksApi\": false,\n  \"fixtureImportsRuntime\": false,\n  \"origin\": \"http://127.0.0.1:4176\",\n  \"userAgent\": \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36\",\n  \"secureContext\": true,\n  \"originAgentCluster\": true,\n  \"modelContextPresent\": true,\n  \"methods\": {\n    \"getTools\": \"function\",\n    \"executeTool\": \"function\",\n    \"registerTool\": \"function\"\n  },\n  \"contextError\": null\n}",
+        "inventoryText": "{\n  \"capturedAt\": \"2026-08-28T16:37:59.121Z\",\n  \"inventory\": [\n    {\n      \"name\": \"search_items\",\n      \"origin\": \"http://127.0.0.1:4176\",\n      \"localWindow\": true,\n      \"inputSchema\": \"{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{},\\\"additionalProperties\\\":false}\"\n    },\n    {\n      \"name\": \"search_products\",\n      \"origin\": \"http://127.0.0.1:4176\",\n      \"localWindow\": true,\n      \"inputSchema\": \"{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"q\\\":{\\\"type\\\":\\\"string\\\",\\\"description\\\":\\\"Value for Search products\\\"}},\\\"additionalProperties\\\":false,\\\"required\\\":[\\\"q\\\"],\\\"description\\\":\\\"Product search\\\"}\"\n    }\n  ],\n  \"captured\": {\n    \"name\": \"search_products\",\n    \"origin\": \"http://127.0.0.1:4176\",\n    \"localWindow\": true,\n    \"inputSchema\": \"{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"q\\\":{\\\"type\\\":\\\"string\\\",\\\"description\\\":\\\"Value for Search products\\\"}},\\\"additionalProperties\\\":false,\\\"required\\\":[\\\"q\\\"],\\\"description\\\":\\\"Product search\\\"}\"\n  },\n  \"error\": null\n}",
+        "status": "No search has run.",
+        "submissionCount": "0"
+      },
+      "nativeAgentCapability": {
+        "available": false,
+        "error": "Error: Capability is not available: webmcp"
+      }
+    }
+  ],
+  "completedAt": "2026-08-28T16:37:59.392Z",
+  "publicSources": [
+    {
+      "url": "https://learn.chatgpt.com/docs/webmcp",
+      "finding": "Explicit native Site tools support and restrictions for the desktop built-in browser."
+    },
+    {
+      "url": "https://learn.chatgpt.com/docs/chrome-extension",
+      "finding": "External Chrome tab control and troubleshooting; no established native-WebMCP support claim in the reviewed page."
+    },
+    {
+      "url": "https://learn.chatgpt.com/docs/changelog#codex-2026-08-25-browser",
+      "finding": "Separate announcements for external browser control and built-in native Site tools."
+    },
+    {
+      "url": "https://learn.chatgpt.com/docs/browser",
+      "finding": "Built-in and cloud browser boundaries."
+    },
+    {
+      "url": "https://webmachinelearning.github.io/webmcp/",
+      "finding": "Page APIs and implementation-defined browser-agent integration; current draft argument/schema shape."
+    },
+    {
+      "url": "https://developer.chrome.com/docs/ai/webmcp/imperative-api",
+      "finding": "Chrome discovery, invocation and lifecycle; documented JSON-string execution arguments."
+    },
+    {
+      "url": "https://chromedevtools.github.io/devtools-protocol/tot/WebMCP/",
+      "finding": "Experimental documented consumer integration commands and events; not invoked here."
+    },
+    {
+      "url": "https://chromedevtools.github.io/devtools-protocol/",
+      "finding": "Tip-of-tree protocol compatibility caveat."
+    },
+    {
+      "url": "https://github.com/puppeteer/puppeteer/issues/15063",
+      "finding": "Maintainer record of modelContext location migration; no evidence this explains the OpenAI connector failure."
+    }
+  ],
+  "schemaVersion": 1,
+  "localDate": "2026-08-29",
+  "planningTimezone": "Asia/Singapore",
+  "consumer": "Current Codex task through its supported Chrome Browser connection",
+  "summary": {
+    "freshCapabilityRequests": 2,
+    "unavailableResponses": 2,
+    "freshNativeAgentCalls": 0,
+    "pageMediatedInventoryCaptures": 1,
+    "freshPageMediatedExecutions": 0,
+    "repositoryRuntimeChanged": false,
+    "browserSettingsChanged": false,
+    "additionalPermissionsOrRelayIntroduced": false,
+    "failureBoundary": "The supported agent interface cannot provide its webmcp capability despite native registrations on the Chrome pages.",
+    "rootCause": "Unresolved: unsupported connector route, feature gating/rollout, or a connector defect are not distinguished by the observed error.",
+    "agreedChatGPTWorkflowVerified": false
+  },
+  "confounds": [
+    "Both loopback fixtures receive automatic project-extension injection. The first probe confirms page-provided tool registration, not an extension-absent environment.",
+    "The fixtures differ in port/origin, schema and page headers. A differential outcome would require a tighter control before causal attribution.",
+    "The earlier Chrome record predates project-extension loading and already shows the same missing capability; it is historical evidence, not a fresh no-extension control.",
+    "The page-provided registration status is fixture-rendered evidence. The extension descriptor was independently observed through the fixture's public getTools button.",
+    "Fresh ordinary browser operations succeeded. No native-host repair, profile-store inspection, blocked manager/flag access, hidden transport, direct CDP, or browser-client implementation inspection was used.",
+    "The chosen user-started desktop ChatGPT Work session was not tested. Built-in-browser native success from earlier runs is not the same external Chrome connection.",
+    "The openai-docs and Chrome/spec reviews establish public interfaces and documented support; documentation silence does not establish universal lack of support."
+  ],
+  "priorEvidence": [
+    {
+      "path": "chrome-relaunch-2026-08-28.json",
+      "finding": "Before project-extension loading, Chrome 152 reported three page-provided native registrations; only pageAssets was advertised and the webmcp capability request failed."
+    },
+    {
+      "path": "installed-extension-2026-08-29.json",
+      "finding": "Six page-mediated native executions succeeded across the installed runtime; a final same-tab agent capability request still failed."
+    },
+    {
+      "path": "native-runtime-reviewed-2026-08-28.json",
+      "finding": "The same runtime source worked with native agent tools in the separate in-app browser fixture; both runtime halves ran in MAIN, not as an installed MV3 extension."
+    }
+  ],
+  "sources": {
+    "recordedAt": "2026-08-28T16:38:46.372Z",
+    "baseCommit": "4eaf27b6c79ded42cb6782b4e57e614d779bf7fb",
+    "sha256": {
+      "extension/manifest.json": "48461eee699bd05a2b54e0fd971ccf13012db12c6fbdab184ee482e1639fee2a",
+      "extension/main-world/runtime.ts": "53be4b08b2be696c4a8a640d2105d3edd44b66bd9b5c29e4bdc521894d81e517",
+      "extension/content/content-script.ts": "909bc2e8837368f783fe3f0cddd8c63be622a1d918fc717aa5b5f7cedd973e10",
+      "core/compiler/compiler.ts": "9175e56421154b92151bc9507f4209c5782fb4b1fcb2c640f934b78f6909da72",
+      "spikes/native-webmcp/index.html": "417cfc79154c7e176ddf58c453eca73f3c18ef0519dda7ef18e3aee33b8156c7",
+      "spikes/native-webmcp/studio.mjs": "18933239c412cc92237e0f34b13bcf7bb3885bb349bf488655dee01e5ebaf1ca",
+      "spikes/native-webmcp/serve.mjs": "437ed27a316b011aed800dfc06c18e331a67875837f1c668587a3dcc61763319",
+      "spikes/installed-extension/index.html": "21924097f1a574c3a169fed24bf49233b7c55aa93decae44e92724d6ed5a7b4c",
+      "spikes/installed-extension/site.mjs": "afe593b5f014f870ea071e83c065fb818ddd9d6ac9a3fbef24b87116e6f63a31",
+      "spikes/installed-extension/serve.mjs": "30f9cdb16168c2cd8b98fbe45e5cb5306fed95207d1b39597d4e51f2949b951d",
+      "docs/feasibility/chrome-relaunch-2026-08-28.json": "cb1dd0ada464cae48a9603d7eda8d928872f0c9a0d8f3a014cc67a9dec50beb6",
+      "docs/feasibility/native-runtime-reviewed-2026-08-28.json": "069a6358bd5da4793a5d79d9b45cb6f7e500fbd0c6a2e051a507fc53667fd5b0",
+      "docs/feasibility/installed-extension-2026-08-29.json": "f44140f2ef6bfa2fc6f8c39f31082087e3855fd7b59142666eb9cca4e071188f"
+    },
+    "limitation": "Hashes describe local source/evidence files; they do not attest Chrome-loaded bytes or the closed-source connector's implementation."
+  },
+  "supportedNextProbe": {
+    "surface": "User-started desktop ChatGPT Work, same Chrome profile and exact fixture tab",
+    "steps": [
+      "Select the Chrome authoring fixture at http://127.0.0.1:4174/ and request a native studio_get_project call with empty arguments.",
+      "If native access exists, select http://127.0.0.1:4176/?marker=work-probe and request native search_products with q=work-native-probe.",
+      "Retain actual native tool activity and results plus the visible revision/log or search effect; browser clicks or page JavaScript calls are not passing substitutes."
+    ],
+    "status": "Not run; the available current agent connection is Codex-to-Chrome. No new Work chat was created automatically."
+  }
+}

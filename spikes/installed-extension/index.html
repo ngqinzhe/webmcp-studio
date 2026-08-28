@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Installed extension · Native browser API diagnostic</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/site.mjs"></script>
+  </head>
+  <body>
+    <main>
+      <h1>Installed extension · Native browser API diagnostic</h1>
+      <p>
+        This synthetic page registers and mocks no tools. It imports no
+        extension runtime or bundle. Tools must come from the separately
+        installed extension.
+      </p>
+      <p>
+        <strong>Component evidence only:</strong> the buttons below call the
+        browser's public native API from page JavaScript. These are not ChatGPT
+        or Codex native-agent calls and cannot close G3.
+      </p>
+
+      <section aria-labelledby="site-heading">
+        <h2 id="site-heading">Synthetic product catalog</h2>
+        <label for="tab-marker">Tab marker (editable between calls)</label>
+        <input id="tab-marker" type="text" />
+        <form id="product-search" aria-label="Product search" method="get">
+          <label for="query">Search products</label>
+          <input id="query" name="q" type="search" required />
+          <button type="submit">Search products</button>
+        </form>
+        <p id="search-status" role="status">No search has run.</p>
+        <p>Submissions: <output id="submission-count">0</output></p>
+        <div>
+          <button id="remove-form" type="button">Remove search form</button>
+          <button id="restore-form" type="button">Restore search form</button>
+        </div>
+        <p>
+          These controls change only this test page's DOM. They do not change
+          extension settings. Removing the form lets the extension retire its
+          tool; restoring it permits rediscovery. The captured descriptor is
+          retained until the next explicit inventory capture.
+        </p>
+      </section>
+
+      <section aria-labelledby="environment-heading">
+        <h2 id="environment-heading">Native API environment at page load</h2>
+        <pre id="environment">Initializing…</pre>
+      </section>
+
+      <section aria-labelledby="inventory-heading">
+        <h2 id="inventory-heading">Explicit native inventory capture</h2>
+        <p>
+          Capture uses <code>document.modelContext.getTools()</code>. It retains
+          the actual returned object only when its name is
+          <code>search_products</code>, its origin equals this page's origin,
+          and its window is this window. It never registers a replacement.
+        </p>
+        <button id="capture-inventory" type="button">
+          Capture native inventory
+        </button>
+        <pre id="native-inventory">No explicit capture yet.</pre>
+      </section>
+
+      <section aria-labelledby="invocation-heading">
+        <h2 id="invocation-heading">Public native API invocation</h2>
+        <p>
+          Exact call format:
+          <code
+            >document.modelContext.executeTool(tool, JSON.stringify(args))</code
+          >. This follows the current Chrome guide's string argument format. The
+          draft specification differs; there is no automatic fallback or retry.
+        </p>
+        <label for="invocation-query">Invocation query</label>
+        <input id="invocation-query" type="text" value="mechanical keyboard" />
+        <div>
+          <button id="invoke-query" type="button">Invoke captured tool</button>
+          <button id="invoke-empty" type="button">
+            Invoke with empty arguments
+          </button>
+        </div>
+        <p>
+          The first button supplies <code>{ "q": "your query" }</code>. The
+          second supplies <code>{}</code> to test invalid-input handling. The
+          captured object is retained until the next explicit capture, including
+          after an error. A stale page-mediated descriptor is not an agent stale
+          handle.
+        </p>
+        <p>
+          While a call is pending, additional diagnostic clicks are ignored and
+          diagnostics stay unchanged. Do not manually edit or submit the form
+          during a call. Only a resolved call's raw result and visible effects
+          establish what happened; a resolved promise alone is not a pass.
+        </p>
+        <p id="operation-status" role="status">No native call attempted.</p>
+        <h3>Last call and visible effects after completion</h3>
+        <pre id="call-record">No native call attempted.</pre>
+        <h3>Raw native return</h3>
+        <pre id="raw-result">No native call attempted.</pre>
+        <h3>Native error</h3>
+        <pre id="raw-error">No native call attempted.</pre>
+      </section>
+    </main>
+  </body>
+</html>

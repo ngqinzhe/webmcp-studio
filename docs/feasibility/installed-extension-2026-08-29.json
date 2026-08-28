@@ -1,0 +1,966 @@
+{
+  "startedAt": "2026-08-28T16:15:23.807Z",
+  "planningTimezone": "Asia/Singapore",
+  "scope": "Installed MV3 extension tested through Chrome public page APIs; not native agent consumption",
+  "connectionProbe": {
+    "available": false,
+    "error": "Capability is not available: webmcp",
+    "provenance": "Observed in the preceding supported Chrome capability request"
+  },
+  "installation": {
+    "userConfirmedLoaded": true,
+    "expectedDirectory": "/Users/zjsng/Projects/Personal/Coding/webmcp-studio/dist/extension",
+    "managerAutomation": "Rejected by Browser URL security policy; user loaded manually",
+    "extensionManagerInspected": false
+  },
+  "preflight": "Six earlier exploratory calls used the fixture before DOM lifecycle controls were added. They are excluded from this recorded run.",
+  "finalConnectionProbe": {
+    "observedAt": "2026-08-28T16:21:28.911Z",
+    "fixture": "http://127.0.0.1:4176/?marker=verified-A",
+    "nativePageToolSuccessfullyInvoked": true,
+    "available": false,
+    "error": "Error: Capability is not available: webmcp"
+  },
+  "completedAt": "2026-08-28T16:21:28.911Z",
+  "schemaVersion": 1,
+  "localDate": "2026-08-29",
+  "environment": {
+    "evidence": "Installed-extension/native-browser-API component diagnostic only",
+    "nativeAgentInvocation": false,
+    "fixtureRegistersTools": false,
+    "fixtureMocksApi": false,
+    "fixtureImportsRuntime": false,
+    "origin": "http://127.0.0.1:4176",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+    "secureContext": true,
+    "originAgentCluster": true,
+    "modelContextPresent": true,
+    "methods": {
+      "getTools": "function",
+      "executeTool": "function",
+      "registerTool": "function"
+    },
+    "contextError": null
+  },
+  "recording": "Raw public-API returns/errors and descriptor snapshots are retained once per actual attempt; timeline observations omit repeated diagnostic panel text.",
+  "sources": {
+    "capturedAt": "2026-08-28T16:14:44.416Z",
+    "baseCommit": "4eaf27b6c79ded42cb6782b4e57e614d779bf7fb",
+    "trackedRuntimeMatchesHead": true,
+    "sourceSha256": {
+      "core/bridge-protocol.ts": "97a8c3d573cf8088dae156f1321117377e91510fb3cb0e165b07528ae92cd373",
+      "core/compiler/compiler.ts": "9175e56421154b92151bc9507f4209c5782fb4b1fcb2c640f934b78f6909da72",
+      "core/compiler/index.ts": "f1ce41a7f00447d02847694ea3716dcc2eb65cbedf7a842832657c8d91fd5624",
+      "core/compiler/types.ts": "9d08474fd2554881ef026833d22e3c24d39df02a6ca4bb3a4c8b6e0accf8c560",
+      "core/detection/assisted.ts": "6749c7b072de0e53cb8d5ae8006b932353f0344cf28efa335986f73d94320a74",
+      "core/detection/incremental.ts": "e7ef7b6858e08a9d420066cf720eb9e345ed4c48148145de6ac84d7c07bf84e3",
+      "core/detection/index.ts": "59de8b071f3f846233f4bb3d3fad714214cc1cf91cb5d609f26fbc7347861bb0",
+      "core/detection/infer.ts": "7953c037a2e9b9ab2d0b82dff41d7d8dc7871334a040f3a5c6e3996f9bbe6601",
+      "core/detection/scanner.ts": "98ccf6fefbbe53ad4ca631458eee0291467ed97f5f603c641ffc28617a3a2803",
+      "core/detection/stabilization.ts": "621998d4b3aad8605db51faf0c642a989aad2be1ff3913463a95ff13d5463300",
+      "core/detection/types.ts": "510c9b252cf513191797ebc7b28d8badc6b6cb6d4faf2cc877d41860c14d41c1",
+      "core/dom/accessibility.ts": "23f9f08a48cb07887aded7fa3003d79298e7509d9a99cc99ef1c6844bca3e400",
+      "core/dom/index.ts": "1bfdcfe22091a929b0b7eed5b6ca6d917e39a6f967877533e1f2b803961047aa",
+      "core/dom/locator.ts": "501e166261ea9258e5a81809c2038416e245c1a9e9f6bea722f4c74a9fa41d80",
+      "core/dom/traversal.ts": "481231c77330972d7bb73819ed19aa87db902aad902dc75e2f24f7e5d892e1c2",
+      "core/dom/traverse.ts": "8d192ffa9c4710d16f0c551564cfc4ddbd0259668aab7ebb51105aee16746381",
+      "core/dom/types.ts": "826e9cd16274c892e79ff55448e2285a3872f0b9957f19546c564ee9af5b3cf1",
+      "core/dom/utils.ts": "eee099424e41ba084f03b83b0323f2f314cd0b1a27b90e8f549e3fcfa5a1e2a1",
+      "core/execution/dom.ts": "cc712e76852a63fc48c7c70ad661bf04576f033f06b550b03eab877c30d8fe90",
+      "core/execution/execute.ts": "93b1733c77446a14b4aafaac77dcbeaf298e86246e0de6448832b92cc8212212",
+      "core/execution/index.ts": "22ec1648c9ee8005aac9b93d187e0719f7412831350ff51d9c4f2d36a90c31c1",
+      "core/execution/snapshot.ts": "f731c3b0fa7adfee7252c709cdeed71f77d8017abbf57bf1af758407fbda90f9",
+      "core/graph/capability-graph.ts": "c70f2f4bfaf9b665113f1934b33a925d22769b04a576e44645832844c7a98987",
+      "core/graph/diff.ts": "117b44a2e55f84350aa5431822639623908affcd8dde70d462e9839c3ac48177",
+      "core/graph/graph.ts": "a7e396e5b25b507d07059d387387953fb3a6891f2f92918b9fa4571ff5ed3133",
+      "core/graph/index.ts": "2b5156c93cea86637270651b90efd45e006c83b47f960bd6a58856b91350c4b1",
+      "core/graph/native-deduplication.ts": "76b7d913a5a6f4d4cdd5d84df0873483580d2eaae2562defd31aee8b68bab967",
+      "core/lifecycle/dom-stabilizer.ts": "720fd219ac60e8f7ef334364661eaacaef9f207db05f02136bb374185a049705",
+      "core/lifecycle/history-hooks.ts": "86148d7b149a2c2bf47fd96646dc96c5384ec3bb989e88001d327860f739ccfc",
+      "core/lifecycle/index.ts": "dc2814a4e2d6ef77e7f8dd97aca0e27d09bca6492cb9f2eb44edecde9ce129c4",
+      "core/lifecycle/lifecycle-controller.ts": "9317bb0b2d1633937af87635338b4dc9231c1bd309b8cebab0d7922c7d6e0feb",
+      "core/locators/accessibility.ts": "4d00f36f786f728b4f6147c86871962744765326794d75f6f8e916dc6f6b9221",
+      "core/locators/index.ts": "8440c7e7e2ac2c53a289a965d85a5d22c196be0367849cf02c13ca62511871d6",
+      "core/locators/resolve.ts": "d6814fcc8ff856684c4d592e83a1f8eebbfc745b8c888c8eaeb2050e405b3ac6",
+      "core/locators/semantic.ts": "607addd9edbc697b0822f5ebc8956fe405a1d736c8dfa60dfe65cb563b57bb38",
+      "core/schema/index.ts": "347cc8ddcc886e2c6a6f54e2f535158a742f2ca83b40f60582dbd5e804ce9fd8",
+      "core/schema/infer.ts": "2bb2f59b1ffcb117fac1b602d9b87e5ac8519c47a81ba29a88dfc8778a639d70",
+      "core/types.ts": "af3ad9b4e48a4b75e55875267d05a6a1328682ddafb56dbb1153afbad5545c3b",
+      "extension/content/content-script.ts": "909bc2e8837368f783fe3f0cddd8c63be622a1d918fc717aa5b5f7cedd973e10",
+      "extension/inspector/index.html": "ba16d62135dc35ef4ab7658a5f088252e5c667f2f93f189971b24d91d602bc91",
+      "extension/inspector/inspector.ts": "318e6e13eca54cf9a835a0eae22b457462ef870394da0000fd417fc4e2277b0d",
+      "extension/inspector/style.css": "ff64f13e272ea18f336304b207aeb953b093afc3e53bb6f3f051425992ca9f03",
+      "extension/main-world/index.ts": "7c13d8c148931d38afb104afab980c2de504eac263d0ee00a1862d8c00040b16",
+      "extension/main-world/runtime.ts": "53be4b08b2be696c4a8a640d2105d3edd44b66bd9b5c29e4bdc521894d81e517",
+      "extension/manifest.json": "48461eee699bd05a2b54e0fd971ccf13012db12c6fbdab184ee482e1639fee2a",
+      "extension/service-worker/service-worker.ts": "f702f7165141d980bcf30fcf88a0f286792a2293afbba70164fb853653856f60",
+      "package.json": "a9a2e8ece9cac6796d4f0a80d0ac9d094d8bb8394b6c6c7c654854dd42537b39",
+      "scripts/build-extension.mjs": "3261a025a031a626a1a9dc08af7e3bde089b337f0cc7e94ea257424138243c06",
+      "sdk/adapter.ts": "78770540a44fbb91253c88273e0d5431d223ada7322d5beb2e4d6c296851c493",
+      "sdk/define-adapter.ts": "dc1c7f81214b00f5b7e27167a1f29af99053cedef4881b4146f7af490d13cab8",
+      "sdk/index.ts": "11d74fb7a66bcc21c693384f0a0ed14c114886c1baee2967664af75722299146",
+      "sdk/registry.ts": "b762cdd831fc72200b3332c3445b5ff832180b3a85810f7e04827cc4d024dcfa",
+      "sdk/transform.ts": "89b03a5bd9c27a856851ace92806ac0db849c38970bd05257752640e09aa3d98",
+      "sdk/types.ts": "61138c48f615f63b12eec90a12879d3d7a97d7398b32fb32aafcf2b4db3586cd",
+      "sdk/validation.ts": "2625e8de2c106f1be671759314cffdea128c4207fe4aa25abd52c4fa7b910c86",
+      "spikes/installed-extension/index.html": "21924097f1a574c3a169fed24bf49233b7c55aa93decae44e92724d6ed5a7b4c",
+      "spikes/installed-extension/serve.mjs": "30f9cdb16168c2cd8b98fbe45e5cb5306fed95207d1b39597d4e51f2949b951d",
+      "spikes/installed-extension/site.mjs": "afe593b5f014f870ea071e83c065fb818ddd9d6ac9a3fbef24b87116e6f63a31",
+      "spikes/native-webmcp/style.css": "e5a5fb20716d0c434dfa84e38e2717c36df037bae53e0abe57156ad2ac74517a",
+      "tsconfig.json": "3dddec2951f55a2ca5ff7abdaf3ae72205ea46d45b537260300dd4d31cc356e3"
+    },
+    "packageSha256": {
+      "dist/extension/manifest.json": "48461eee699bd05a2b54e0fd971ccf13012db12c6fbdab184ee482e1639fee2a",
+      "dist/extension/service-worker.js": "0f262d98d7d913cf2f7ef08b710a2ddc56160019fb3884aad3c2427da8a7b16c",
+      "dist/extension/main-world.js": "a7092db526291e98905ceb5dd39ee7a4e995a44624855e20db3d5b11cee4d97e",
+      "dist/extension/content.js": "0ce34727640a538b5e9de5e24d8114c5674d2d73ca7086497efdf665e9858fc5",
+      "dist/extension/inspector/index.html": "ba16d62135dc35ef4ab7658a5f088252e5c667f2f93f189971b24d91d602bc91",
+      "dist/extension/inspector/inspector.js": "8a812b6a31dfde630f85aaa1654a87028fcc531a1df2dc3e34ab35d0ca9580e6",
+      "dist/extension/inspector/style.css": "ff64f13e272ea18f336304b207aeb953b093afc3e53bb6f3f051425992ca9f03"
+    },
+    "dependencyVersions": {
+      "@playwright/test": "1.62.1",
+      "@types/chrome": "0.0.280",
+      "@types/node": "22.20.1",
+      "esbuild": "0.24.2",
+      "jsdom": "26.1.0",
+      "prettier": "3.9.6",
+      "typescript": "5.9.3",
+      "vitest": "3.2.7"
+    },
+    "manifest": {
+      "manifest_version": 3,
+      "name": "WebMCP Studio",
+      "version": "0.1.0",
+      "description": "WebMCP Studio infers meaningful WebMCP tools from the live semantic DOM without changing site source.",
+      "minimum_chrome_version": "120",
+      "permissions": ["activeTab", "scripting"],
+      "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
+      "background": {
+        "service_worker": "service-worker.js",
+        "type": "module"
+      },
+      "action": {
+        "default_title": "Inspect WebMCP capabilities"
+      },
+      "content_scripts": [
+        {
+          "matches": ["http://127.0.0.1/*", "http://localhost/*"],
+          "js": ["main-world.js"],
+          "run_at": "document_start",
+          "world": "MAIN"
+        },
+        {
+          "matches": ["http://127.0.0.1/*", "http://localhost/*"],
+          "js": ["content.js"],
+          "run_at": "document_idle",
+          "world": "ISOLATED"
+        }
+      ]
+    },
+    "node": "v22.23.1",
+    "limitation": "Package hashes describe on-disk dist/extension files at capture, not bytes independently extracted from Chrome."
+  },
+  "calls": [
+    {
+      "event": "call-A-1",
+      "observedAt": "2026-08-28T16:15:59.710Z",
+      "call": {
+        "evidence": "Page-mediated native API call; not native-agent G3 proof",
+        "nativeAgentInvocation": false,
+        "kind": "query",
+        "attempted": true,
+        "apiPromiseResolved": true,
+        "startedAt": "2026-08-28T16:15:59.551Z",
+        "completedAt": "2026-08-28T16:15:59.561Z",
+        "capturedAt": "2026-08-28T16:15:59.242Z",
+        "captured": {
+          "name": "search_products",
+          "origin": "http://127.0.0.1:4176",
+          "localWindow": true,
+          "inputSchema": "{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\",\"description\":\"Value for Search products\"}},\"additionalProperties\":false,\"required\":[\"q\"],\"description\":\"Product search\"}"
+        },
+        "inputFormat": "JSON string passed as executeTool's second argument",
+        "argumentObject": {
+          "q": "verified-A-1"
+        },
+        "serializedSecondArgument": "{\"q\":\"verified-A-1\"}",
+        "returnType": "string",
+        "before": {
+          "tabMarker": "verified-A",
+          "submissionCounter": "0",
+          "status": "No search has run.",
+          "visibleQuery": "",
+          "formPresent": true
+        },
+        "after": {
+          "tabMarker": "verified-A",
+          "submissionCounter": "1",
+          "status": "Results for verified-A-1 in verified-A.",
+          "visibleQuery": "verified-A-1",
+          "formPresent": true
+        }
+      },
+      "rawReturn": "{\"success\":true,\"status\":\"completed\",\"urlBefore\":\"http://127.0.0.1:4176/?marker=verified-A\",\"urlAfter\":\"http://127.0.0.1:4176/?marker=verified-A\",\"navigationOccurred\":false,\"stateChanged\":true,\"warnings\":[],\"matchedTarget\":\"<form#product-search>\",\"result\":{\"submitted\":true,\"fields\":[\"q\"]}}",
+      "rawError": null
+    },
+    {
+      "event": "call-invalid-input",
+      "observedAt": "2026-08-28T16:16:00.006Z",
+      "call": {
+        "evidence": "Page-mediated native API call; not native-agent G3 proof",
+        "nativeAgentInvocation": false,
+        "kind": "empty arguments",
+        "attempted": true,
+        "apiPromiseResolved": true,
+        "startedAt": "2026-08-28T16:15:59.944Z",
+        "completedAt": "2026-08-28T16:15:59.950Z",
+        "capturedAt": "2026-08-28T16:15:59.242Z",
+        "captured": {
+          "name": "search_products",
+          "origin": "http://127.0.0.1:4176",
+          "localWindow": true,
+          "inputSchema": "{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\",\"description\":\"Value for Search products\"}},\"additionalProperties\":false,\"required\":[\"q\"],\"description\":\"Product search\"}"
+        },
+        "inputFormat": "JSON string passed as executeTool's second argument",
+        "argumentObject": {},
+        "serializedSecondArgument": "{}",
+        "returnType": "string",
+        "before": {
+          "tabMarker": "verified-A",
+          "submissionCounter": "1",
+          "status": "Results for verified-A-1 in verified-A.",
+          "visibleQuery": "verified-A-1",
+          "formPresent": true
+        },
+        "after": {
+          "tabMarker": "verified-A",
+          "submissionCounter": "1",
+          "status": "Results for verified-A-1 in verified-A.",
+          "visibleQuery": "verified-A-1",
+          "formPresent": true
+        }
+      },
+      "rawReturn": "{\"success\":false,\"status\":\"invalid_arguments\",\"urlBefore\":\"http://127.0.0.1:4176/?marker=verified-A\",\"urlAfter\":\"http://127.0.0.1:4176/?marker=verified-A\",\"navigationOccurred\":false,\"stateChanged\":false,\"warnings\":[],\"error\":{\"code\":\"invalid_arguments\",\"message\":\"$input.q is required.\"}}",
+      "rawError": null
+    },
+    {
+      "event": "call-A-after-UI-edit",
+      "observedAt": "2026-08-28T16:16:00.352Z",
+      "call": {
+        "evidence": "Page-mediated native API call; not native-agent G3 proof",
+        "nativeAgentInvocation": false,
+        "kind": "query",
+        "attempted": true,
+        "apiPromiseResolved": true,
+        "startedAt": "2026-08-28T16:16:00.226Z",
+        "completedAt": "2026-08-28T16:16:00.238Z",
+        "capturedAt": "2026-08-28T16:15:59.242Z",
+        "captured": {
+          "name": "search_products",
+          "origin": "http://127.0.0.1:4176",
+          "localWindow": true,
+          "inputSchema": "{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\",\"description\":\"Value for Search products\"}},\"additionalProperties\":false,\"required\":[\"q\"],\"description\":\"Product search\"}"
+        },
+        "inputFormat": "JSON string passed as executeTool's second argument",
+        "argumentObject": {
+          "q": "verified-A-2"
+        },
+        "serializedSecondArgument": "{\"q\":\"verified-A-2\"}",
+        "returnType": "string",
+        "before": {
+          "tabMarker": "verified-A-edited",
+          "submissionCounter": "1",
+          "status": "Results for verified-A-1 in verified-A.",
+          "visibleQuery": "verified-A-1",
+          "formPresent": true
+        },
+        "after": {
+          "tabMarker": "verified-A-edited",
+          "submissionCounter": "2",
+          "status": "Results for verified-A-2 in verified-A-edited.",
+          "visibleQuery": "verified-A-2",
+          "formPresent": true
+        }
+      },
+      "rawReturn": "{\"success\":true,\"status\":\"completed\",\"urlBefore\":\"http://127.0.0.1:4176/?marker=verified-A\",\"urlAfter\":\"http://127.0.0.1:4176/?marker=verified-A\",\"navigationOccurred\":false,\"stateChanged\":true,\"warnings\":[],\"matchedTarget\":\"<form#product-search>\",\"result\":{\"submitted\":true,\"fields\":[\"q\"]}}",
+      "rawError": null
+    },
+    {
+      "event": "call-B-1",
+      "observedAt": "2026-08-28T16:17:39.759Z",
+      "call": {
+        "evidence": "Page-mediated native API call; not native-agent G3 proof",
+        "nativeAgentInvocation": false,
+        "kind": "query",
+        "attempted": true,
+        "apiPromiseResolved": true,
+        "startedAt": "2026-08-28T16:17:39.496Z",
+        "completedAt": "2026-08-28T16:17:39.522Z",
+        "capturedAt": "2026-08-28T16:17:39.175Z",
+        "captured": {
+          "name": "search_products",
+          "origin": "http://127.0.0.1:4176",
+          "localWindow": true,
+          "inputSchema": "{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\",\"description\":\"Value for Search products\"}},\"additionalProperties\":false,\"required\":[\"q\"],\"description\":\"Product search\"}"
+        },
+        "inputFormat": "JSON string passed as executeTool's second argument",
+        "argumentObject": {
+          "q": "verified-B-1"
+        },
+        "serializedSecondArgument": "{\"q\":\"verified-B-1\"}",
+        "returnType": "string",
+        "before": {
+          "tabMarker": "verified-B",
+          "submissionCounter": "0",
+          "status": "No search has run.",
+          "visibleQuery": "",
+          "formPresent": true
+        },
+        "after": {
+          "tabMarker": "verified-B",
+          "submissionCounter": "1",
+          "status": "Results for verified-B-1 in verified-B.",
+          "visibleQuery": "verified-B-1",
+          "formPresent": true
+        }
+      },
+      "rawReturn": "{\"success\":true,\"status\":\"completed\",\"urlBefore\":\"http://127.0.0.1:4176/?marker=verified-B\",\"urlAfter\":\"http://127.0.0.1:4176/?marker=verified-B\",\"navigationOccurred\":false,\"stateChanged\":true,\"warnings\":[],\"matchedTarget\":\"<form#product-search>\",\"result\":{\"submitted\":true,\"fields\":[\"q\"]}}",
+      "rawError": null
+    },
+    {
+      "event": "call-A-after-B",
+      "observedAt": "2026-08-28T16:17:40.093Z",
+      "call": {
+        "evidence": "Page-mediated native API call; not native-agent G3 proof",
+        "nativeAgentInvocation": false,
+        "kind": "query",
+        "attempted": true,
+        "apiPromiseResolved": true,
+        "startedAt": "2026-08-28T16:17:39.825Z",
+        "completedAt": "2026-08-28T16:17:39.833Z",
+        "capturedAt": "2026-08-28T16:15:59.242Z",
+        "captured": {
+          "name": "search_products",
+          "origin": "http://127.0.0.1:4176",
+          "localWindow": true,
+          "inputSchema": "{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\",\"description\":\"Value for Search products\"}},\"additionalProperties\":false,\"required\":[\"q\"],\"description\":\"Product search\"}"
+        },
+        "inputFormat": "JSON string passed as executeTool's second argument",
+        "argumentObject": {
+          "q": "verified-A-3"
+        },
+        "serializedSecondArgument": "{\"q\":\"verified-A-3\"}",
+        "returnType": "string",
+        "before": {
+          "tabMarker": "verified-A-edited",
+          "submissionCounter": "2",
+          "status": "Results for verified-A-2 in verified-A-edited.",
+          "visibleQuery": "verified-A-2",
+          "formPresent": true
+        },
+        "after": {
+          "tabMarker": "verified-A-edited",
+          "submissionCounter": "3",
+          "status": "Results for verified-A-3 in verified-A-edited.",
+          "visibleQuery": "verified-A-3",
+          "formPresent": true
+        }
+      },
+      "rawReturn": "{\"success\":true,\"status\":\"completed\",\"urlBefore\":\"http://127.0.0.1:4176/?marker=verified-A\",\"urlAfter\":\"http://127.0.0.1:4176/?marker=verified-A\",\"navigationOccurred\":false,\"stateChanged\":true,\"warnings\":[],\"matchedTarget\":\"<form#product-search>\",\"result\":{\"submitted\":true,\"fields\":[\"q\"]}}",
+      "rawError": null
+    },
+    {
+      "event": "call-B-after-navigation",
+      "observedAt": "2026-08-28T16:17:51.718Z",
+      "call": {
+        "evidence": "Page-mediated native API call; not native-agent G3 proof",
+        "nativeAgentInvocation": false,
+        "kind": "query",
+        "attempted": true,
+        "apiPromiseResolved": true,
+        "startedAt": "2026-08-28T16:17:51.453Z",
+        "completedAt": "2026-08-28T16:17:51.468Z",
+        "capturedAt": "2026-08-28T16:17:51.133Z",
+        "captured": {
+          "name": "search_products",
+          "origin": "http://127.0.0.1:4176",
+          "localWindow": true,
+          "inputSchema": "{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\",\"description\":\"Value for Search products\"}},\"additionalProperties\":false,\"required\":[\"q\"],\"description\":\"Product search\"}"
+        },
+        "inputFormat": "JSON string passed as executeTool's second argument",
+        "argumentObject": {
+          "q": "verified-B-after-reload"
+        },
+        "serializedSecondArgument": "{\"q\":\"verified-B-after-reload\"}",
+        "returnType": "string",
+        "before": {
+          "tabMarker": "verified-B-reloaded",
+          "submissionCounter": "0",
+          "status": "No search has run.",
+          "visibleQuery": "",
+          "formPresent": true
+        },
+        "after": {
+          "tabMarker": "verified-B-reloaded",
+          "submissionCounter": "1",
+          "status": "Results for verified-B-after-reload in verified-B-reloaded.",
+          "visibleQuery": "verified-B-after-reload",
+          "formPresent": true
+        }
+      },
+      "rawReturn": "{\"success\":true,\"status\":\"completed\",\"urlBefore\":\"http://127.0.0.1:4176/?marker=verified-B-reloaded\",\"urlAfter\":\"http://127.0.0.1:4176/?marker=verified-B-reloaded\",\"navigationOccurred\":false,\"stateChanged\":true,\"warnings\":[],\"matchedTarget\":\"<form#product-search>\",\"result\":{\"submitted\":true,\"fields\":[\"q\"]}}",
+      "rawError": null
+    },
+    {
+      "event": "call-captured-descriptor-after-removal",
+      "observedAt": "2026-08-28T16:18:19.525Z",
+      "call": {
+        "evidence": "Page-mediated native API call; not native-agent G3 proof",
+        "nativeAgentInvocation": false,
+        "kind": "query",
+        "attempted": true,
+        "apiPromiseResolved": false,
+        "startedAt": "2026-08-28T16:18:19.374Z",
+        "completedAt": "2026-08-28T16:18:19.380Z",
+        "capturedAt": "2026-08-28T16:15:59.242Z",
+        "captured": {
+          "name": "search_products",
+          "origin": "http://127.0.0.1:4176",
+          "localWindow": true,
+          "inputSchema": "{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\",\"description\":\"Value for Search products\"}},\"additionalProperties\":false,\"required\":[\"q\"],\"description\":\"Product search\"}"
+        },
+        "inputFormat": "JSON string passed as executeTool's second argument",
+        "argumentObject": {
+          "q": "must-not-run-after-removal"
+        },
+        "serializedSecondArgument": "{\"q\":\"must-not-run-after-removal\"}",
+        "returnType": null,
+        "before": {
+          "tabMarker": "verified-A-edited",
+          "submissionCounter": "3",
+          "status": "Results for verified-A-3 in verified-A-edited.",
+          "visibleQuery": null,
+          "formPresent": false
+        },
+        "after": {
+          "tabMarker": "verified-A-edited",
+          "submissionCounter": "3",
+          "status": "Results for verified-A-3 in verified-A-edited.",
+          "visibleQuery": null,
+          "formPresent": false
+        }
+      },
+      "rawReturn": null,
+      "rawError": {
+        "name": "UnknownError",
+        "message": "The operation failed for an unknown transient reason (e.g. out of memory).",
+        "asString": "UnknownError: The operation failed for an unknown transient reason (e.g. out of memory)."
+      },
+      "noReturnDiagnosticText": "No native return: the call was not attempted or rejected."
+    },
+    {
+      "event": "call-A-after-restore",
+      "observedAt": "2026-08-28T16:21:28.886Z",
+      "call": {
+        "evidence": "Page-mediated native API call; not native-agent G3 proof",
+        "nativeAgentInvocation": false,
+        "kind": "query",
+        "attempted": true,
+        "apiPromiseResolved": true,
+        "startedAt": "2026-08-28T16:21:28.728Z",
+        "completedAt": "2026-08-28T16:21:28.735Z",
+        "capturedAt": "2026-08-28T16:21:19.197Z",
+        "captured": {
+          "name": "search_products",
+          "origin": "http://127.0.0.1:4176",
+          "localWindow": true,
+          "inputSchema": "{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\",\"description\":\"Value for Search products\"}},\"additionalProperties\":false,\"required\":[\"q\"],\"description\":\"Product search\"}"
+        },
+        "inputFormat": "JSON string passed as executeTool's second argument",
+        "argumentObject": {
+          "q": "verified-A-after-restore"
+        },
+        "serializedSecondArgument": "{\"q\":\"verified-A-after-restore\"}",
+        "returnType": "string",
+        "before": {
+          "tabMarker": "verified-A-edited",
+          "submissionCounter": "3",
+          "status": "Results for verified-A-3 in verified-A-edited.",
+          "visibleQuery": "verified-A-3",
+          "formPresent": true
+        },
+        "after": {
+          "tabMarker": "verified-A-edited",
+          "submissionCounter": "4",
+          "status": "Results for verified-A-after-restore in verified-A-edited.",
+          "visibleQuery": "verified-A-after-restore",
+          "formPresent": true
+        }
+      },
+      "rawReturn": "{\"success\":true,\"status\":\"completed\",\"urlBefore\":\"http://127.0.0.1:4176/?marker=verified-A\",\"urlAfter\":\"http://127.0.0.1:4176/?marker=verified-A\",\"navigationOccurred\":false,\"stateChanged\":true,\"warnings\":[],\"matchedTarget\":\"<form#product-search>\",\"result\":{\"submitted\":true,\"fields\":[\"q\"]}}",
+      "rawError": null
+    }
+  ],
+  "inventories": [
+    {
+      "event": "inventory-A",
+      "observedAt": "2026-08-28T16:15:59.392Z",
+      "capturedAt": "2026-08-28T16:15:59.242Z",
+      "inventory": [
+        {
+          "name": "search_items",
+          "origin": "http://127.0.0.1:4176",
+          "localWindow": true,
+          "inputSchema": "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"
+        },
+        {
+          "name": "search_products",
+          "origin": "http://127.0.0.1:4176",
+          "localWindow": true,
+          "inputSchema": "{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\",\"description\":\"Value for Search products\"}},\"additionalProperties\":false,\"required\":[\"q\"],\"description\":\"Product search\"}"
+        }
+      ],
+      "captured": {
+        "name": "search_products",
+        "origin": "http://127.0.0.1:4176",
+        "localWindow": true,
+        "inputSchema": "{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\",\"description\":\"Value for Search products\"}},\"additionalProperties\":false,\"required\":[\"q\"],\"description\":\"Product search\"}"
+      },
+      "error": null
+    },
+    {
+      "event": "inventory-B",
+      "observedAt": "2026-08-28T16:17:39.436Z",
+      "capturedAt": "2026-08-28T16:17:39.175Z",
+      "inventory": [
+        {
+          "name": "search_items",
+          "origin": "http://127.0.0.1:4176",
+          "localWindow": true,
+          "inputSchema": "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"
+        },
+        {
+          "name": "search_products",
+          "origin": "http://127.0.0.1:4176",
+          "localWindow": true,
+          "inputSchema": "{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\",\"description\":\"Value for Search products\"}},\"additionalProperties\":false,\"required\":[\"q\"],\"description\":\"Product search\"}"
+        }
+      ],
+      "captured": {
+        "name": "search_products",
+        "origin": "http://127.0.0.1:4176",
+        "localWindow": true,
+        "inputSchema": "{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\",\"description\":\"Value for Search products\"}},\"additionalProperties\":false,\"required\":[\"q\"],\"description\":\"Product search\"}"
+      },
+      "error": null
+    },
+    {
+      "event": "inventory-B-after-navigation",
+      "observedAt": "2026-08-28T16:17:51.391Z",
+      "capturedAt": "2026-08-28T16:17:51.133Z",
+      "inventory": [
+        {
+          "name": "search_items",
+          "origin": "http://127.0.0.1:4176",
+          "localWindow": true,
+          "inputSchema": "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"
+        },
+        {
+          "name": "search_products",
+          "origin": "http://127.0.0.1:4176",
+          "localWindow": true,
+          "inputSchema": "{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\",\"description\":\"Value for Search products\"}},\"additionalProperties\":false,\"required\":[\"q\"],\"description\":\"Product search\"}"
+        }
+      ],
+      "captured": {
+        "name": "search_products",
+        "origin": "http://127.0.0.1:4176",
+        "localWindow": true,
+        "inputSchema": "{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\",\"description\":\"Value for Search products\"}},\"additionalProperties\":false,\"required\":[\"q\"],\"description\":\"Product search\"}"
+      },
+      "error": null
+    },
+    {
+      "event": "inventory-A-after-removal",
+      "observedAt": "2026-08-28T16:18:19.820Z",
+      "capturedAt": null,
+      "inventory": [
+        {
+          "name": "search_items",
+          "origin": "http://127.0.0.1:4176",
+          "localWindow": true,
+          "inputSchema": "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"
+        }
+      ],
+      "captured": null,
+      "error": {
+        "name": "Error",
+        "message": "Expected one local search_products registration; found 0. No descriptor was selected.",
+        "asString": "Error: Expected one local search_products registration; found 0. No descriptor was selected."
+      }
+    },
+    {
+      "event": "inventory-A-after-restore",
+      "observedAt": "2026-08-28T16:21:19.349Z",
+      "capturedAt": "2026-08-28T16:21:19.197Z",
+      "inventory": [
+        {
+          "name": "search_items",
+          "origin": "http://127.0.0.1:4176",
+          "localWindow": true,
+          "inputSchema": "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"
+        },
+        {
+          "name": "search_products",
+          "origin": "http://127.0.0.1:4176",
+          "localWindow": true,
+          "inputSchema": "{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\",\"description\":\"Value for Search products\"}},\"additionalProperties\":false,\"required\":[\"q\"],\"description\":\"Product search\"}"
+        }
+      ],
+      "captured": {
+        "name": "search_products",
+        "origin": "http://127.0.0.1:4176",
+        "localWindow": true,
+        "inputSchema": "{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\",\"description\":\"Value for Search products\"}},\"additionalProperties\":false,\"required\":[\"q\"],\"description\":\"Product search\"}"
+      },
+      "error": null
+    }
+  ],
+  "observations": [
+    {
+      "event": "initial-A",
+      "marker": "verified-A",
+      "query": "",
+      "formPresent": true,
+      "submissionCount": "0",
+      "status": "No search has run.",
+      "operationStatus": "No native call attempted."
+    },
+    {
+      "event": "initial-B",
+      "marker": "verified-B",
+      "query": "",
+      "formPresent": true,
+      "submissionCount": "0",
+      "status": "No search has run.",
+      "operationStatus": "No native call attempted."
+    },
+    {
+      "event": "inventory-A",
+      "observedAt": "2026-08-28T16:15:59.392Z",
+      "marker": "verified-A",
+      "query": "",
+      "formPresent": true,
+      "submissionCount": "0",
+      "status": "No search has run.",
+      "operationStatus": "Captured the native object for this page's search_products tool."
+    },
+    {
+      "event": "call-A-1",
+      "observedAt": "2026-08-28T16:15:59.710Z",
+      "marker": "verified-A",
+      "query": "verified-A-1",
+      "formPresent": true,
+      "submissionCount": "1",
+      "status": "Results for verified-A-1 in verified-A.",
+      "operationStatus": "executeTool resolved. Check the raw return and visible effects."
+    },
+    {
+      "event": "call-invalid-input",
+      "observedAt": "2026-08-28T16:16:00.006Z",
+      "marker": "verified-A",
+      "query": "verified-A-1",
+      "formPresent": true,
+      "submissionCount": "1",
+      "status": "Results for verified-A-1 in verified-A.",
+      "operationStatus": "executeTool resolved. Check the raw return and visible effects."
+    },
+    {
+      "event": "UI-marker-edit-A",
+      "observedAt": "2026-08-28T16:16:00.039Z",
+      "marker": "verified-A-edited",
+      "query": "verified-A-1",
+      "formPresent": true,
+      "submissionCount": "1",
+      "status": "Results for verified-A-1 in verified-A.",
+      "operationStatus": "executeTool resolved. Check the raw return and visible effects."
+    },
+    {
+      "event": "call-A-after-UI-edit",
+      "observedAt": "2026-08-28T16:16:00.352Z",
+      "marker": "verified-A-edited",
+      "query": "verified-A-2",
+      "formPresent": true,
+      "submissionCount": "2",
+      "status": "Results for verified-A-2 in verified-A-edited.",
+      "operationStatus": "executeTool resolved. Check the raw return and visible effects."
+    },
+    {
+      "event": "inventory-B",
+      "observedAt": "2026-08-28T16:17:39.436Z",
+      "marker": "verified-B",
+      "query": "",
+      "formPresent": true,
+      "submissionCount": "0",
+      "status": "No search has run.",
+      "operationStatus": "Captured the native object for this page's search_products tool."
+    },
+    {
+      "event": "call-B-1",
+      "observedAt": "2026-08-28T16:17:39.759Z",
+      "marker": "verified-B",
+      "query": "verified-B-1",
+      "formPresent": true,
+      "submissionCount": "1",
+      "status": "Results for verified-B-1 in verified-B.",
+      "operationStatus": "executeTool resolved. Check the raw return and visible effects."
+    },
+    {
+      "event": "A-unchanged-after-B",
+      "observedAt": "2026-08-28T16:17:39.779Z",
+      "marker": "verified-A-edited",
+      "query": "verified-A-2",
+      "formPresent": true,
+      "submissionCount": "2",
+      "status": "Results for verified-A-2 in verified-A-edited.",
+      "operationStatus": "executeTool resolved. Check the raw return and visible effects."
+    },
+    {
+      "event": "call-A-after-B",
+      "observedAt": "2026-08-28T16:17:40.093Z",
+      "marker": "verified-A-edited",
+      "query": "verified-A-3",
+      "formPresent": true,
+      "submissionCount": "3",
+      "status": "Results for verified-A-3 in verified-A-edited.",
+      "operationStatus": "executeTool resolved. Check the raw return and visible effects."
+    },
+    {
+      "event": "B-unchanged-after-A",
+      "observedAt": "2026-08-28T16:17:40.115Z",
+      "marker": "verified-B",
+      "query": "verified-B-1",
+      "formPresent": true,
+      "submissionCount": "1",
+      "status": "Results for verified-B-1 in verified-B.",
+      "operationStatus": "executeTool resolved. Check the raw return and visible effects."
+    },
+    {
+      "event": "B-full-navigation",
+      "observedAt": "2026-08-28T16:17:40.234Z",
+      "marker": "verified-B-reloaded",
+      "query": "",
+      "formPresent": true,
+      "submissionCount": "0",
+      "status": "No search has run.",
+      "operationStatus": "No native call attempted."
+    },
+    {
+      "event": "inventory-B-after-navigation",
+      "observedAt": "2026-08-28T16:17:51.391Z",
+      "marker": "verified-B-reloaded",
+      "query": "",
+      "formPresent": true,
+      "submissionCount": "0",
+      "status": "No search has run.",
+      "operationStatus": "Captured the native object for this page's search_products tool."
+    },
+    {
+      "event": "call-B-after-navigation",
+      "observedAt": "2026-08-28T16:17:51.718Z",
+      "marker": "verified-B-reloaded",
+      "query": "verified-B-after-reload",
+      "formPresent": true,
+      "submissionCount": "1",
+      "status": "Results for verified-B-after-reload in verified-B-reloaded.",
+      "operationStatus": "executeTool resolved. Check the raw return and visible effects."
+    },
+    {
+      "event": "A-unchanged-after-B-navigation",
+      "observedAt": "2026-08-28T16:17:51.742Z",
+      "marker": "verified-A-edited",
+      "query": "verified-A-3",
+      "formPresent": true,
+      "submissionCount": "3",
+      "status": "Results for verified-A-3 in verified-A-edited.",
+      "operationStatus": "executeTool resolved. Check the raw return and visible effects."
+    },
+    {
+      "event": "UI-remove-form-A",
+      "observedAt": "2026-08-28T16:17:52.038Z",
+      "marker": "verified-A-edited",
+      "query": null,
+      "formPresent": false,
+      "submissionCount": "3",
+      "status": "Results for verified-A-3 in verified-A-edited.",
+      "operationStatus": "executeTool resolved. Check the raw return and visible effects."
+    },
+    {
+      "event": "call-captured-descriptor-after-removal",
+      "observedAt": "2026-08-28T16:18:19.525Z",
+      "marker": "verified-A-edited",
+      "query": null,
+      "formPresent": false,
+      "submissionCount": "3",
+      "status": "Results for verified-A-3 in verified-A-edited.",
+      "operationStatus": "executeTool was not attempted or rejected. No fallback or retry occurred."
+    },
+    {
+      "event": "inventory-A-after-removal",
+      "observedAt": "2026-08-28T16:18:19.820Z",
+      "marker": "verified-A-edited",
+      "query": null,
+      "formPresent": false,
+      "submissionCount": "3",
+      "status": "Results for verified-A-3 in verified-A-edited.",
+      "operationStatus": "Inventory capture did not select a tool. See the exact error above."
+    },
+    {
+      "event": "B-unchanged-after-A-removal",
+      "observedAt": "2026-08-28T16:18:19.842Z",
+      "marker": "verified-B-reloaded",
+      "query": "verified-B-after-reload",
+      "formPresent": true,
+      "submissionCount": "1",
+      "status": "Results for verified-B-after-reload in verified-B-reloaded.",
+      "operationStatus": "executeTool resolved. Check the raw return and visible effects."
+    },
+    {
+      "event": "UI-restore-form-A",
+      "observedAt": "2026-08-28T16:21:19.054Z",
+      "marker": "verified-A-edited",
+      "query": "verified-A-3",
+      "formPresent": true,
+      "submissionCount": "3",
+      "status": "Results for verified-A-3 in verified-A-edited.",
+      "operationStatus": "Inventory capture did not select a tool. See the exact error above."
+    },
+    {
+      "event": "inventory-A-after-restore",
+      "observedAt": "2026-08-28T16:21:19.349Z",
+      "marker": "verified-A-edited",
+      "query": "verified-A-3",
+      "formPresent": true,
+      "submissionCount": "3",
+      "status": "Results for verified-A-3 in verified-A-edited.",
+      "operationStatus": "Captured the native object for this page's search_products tool."
+    },
+    {
+      "event": "call-A-after-restore",
+      "observedAt": "2026-08-28T16:21:28.886Z",
+      "marker": "verified-A-edited",
+      "query": "verified-A-after-restore",
+      "formPresent": true,
+      "submissionCount": "4",
+      "status": "Results for verified-A-after-restore in verified-A-edited.",
+      "operationStatus": "executeTool resolved. Check the raw return and visible effects."
+    },
+    {
+      "event": "B-unchanged-after-A-restore-call",
+      "observedAt": "2026-08-28T16:21:28.911Z",
+      "marker": "verified-B-reloaded",
+      "query": "verified-B-after-reload",
+      "formPresent": true,
+      "submissionCount": "1",
+      "status": "Results for verified-B-after-reload in verified-B-reloaded.",
+      "operationStatus": "executeTool resolved. Check the raw return and visible effects."
+    }
+  ],
+  "summary": {
+    "attemptedCalls": 8,
+    "successfulCalls": 6,
+    "invalidArgumentResponses": 1,
+    "rejectedApiPromises": 1,
+    "inventoriedSnapshots": 5,
+    "timelineObservations": 24,
+    "componentChecksPassed": 7,
+    "nativeAgentConsumptionVerified": false,
+    "fullProjectFeasibilityCleared": false
+  },
+  "checks": [
+    {
+      "id": "native-registration-and-execution",
+      "passed": true,
+      "evidenceEvents": [
+        "inventory-A",
+        "inventory-B",
+        "call-A-1",
+        "call-A-after-UI-edit",
+        "call-B-1",
+        "call-A-after-B",
+        "call-B-after-navigation",
+        "call-A-after-restore"
+      ],
+      "scope": "Six normal page-mediated native calls each produced exactly one synthetic form submission."
+    },
+    {
+      "id": "invalid-input-no-effect",
+      "passed": true,
+      "evidenceEvents": ["call-invalid-input"],
+      "scope": "The API resolved with an application-level invalid_arguments response; it did not reject its promise."
+    },
+    {
+      "id": "current-ui-state",
+      "passed": true,
+      "evidenceEvents": ["UI-marker-edit-A", "call-A-after-UI-edit"],
+      "scope": "The editable marker was changed through browser UI automation, not by a separate human participant."
+    },
+    {
+      "id": "two-way-tab-effect-isolation",
+      "passed": true,
+      "evidenceEvents": [
+        "call-B-1",
+        "A-unchanged-after-B",
+        "call-A-after-B",
+        "B-unchanged-after-A"
+      ],
+      "scope": "Same-origin native tool selection and effects in two tabs; not Studio pairing or service-worker inspector routing."
+    },
+    {
+      "id": "full-navigation-loopback",
+      "passed": true,
+      "evidenceEvents": [
+        "B-full-navigation",
+        "inventory-B-after-navigation",
+        "call-B-after-navigation",
+        "A-unchanged-after-B-navigation"
+      ],
+      "scope": "Fresh document at a statically permitted loopback origin; not persistent public-domain activation or SPA navigation."
+    },
+    {
+      "id": "dom-removal-cached-descriptor",
+      "passed": true,
+      "evidenceEvents": [
+        "UI-remove-form-A",
+        "call-captured-descriptor-after-removal",
+        "inventory-A-after-removal",
+        "B-unchanged-after-A-removal"
+      ],
+      "scope": "The cached RegisteredTool call rejected without visible effects and search_products was absent from a subsequent inventory. The generic UnknownError does not establish a specific failure cause. search_items remained registered."
+    },
+    {
+      "id": "dom-restoration-and-new-capture",
+      "passed": true,
+      "evidenceEvents": [
+        "UI-restore-form-A",
+        "inventory-A-after-restore",
+        "call-A-after-restore",
+        "B-unchanged-after-A-restore-call"
+      ],
+      "scope": "DOM-driven registration lifecycle only; not the inspector enable/disable setting or in-flight cancellation."
+    }
+  ],
+  "limitations": [
+    "The user confirmed manual loading; extension-manager automation was blocked. Source and package hashes describe the files on disk, not bytes attested from the running Chrome extension.",
+    "The controlled fixture calls public getTools/executeTool from visible buttons. It neither registers nor mocks tools and imports no extension runtime. This is page-mediated component proof, not native agent consumption.",
+    "The verified Chrome tab still rejects the agent WebMCP capability. The chosen user-started ChatGPT route and a single supported setup satisfying G1-G3 remain unverified.",
+    "The tested native callback uses the MAIN/ISOLATED page bridge, not the service-worker inspector command path. Scoped Studio pairing and its authorization are unbuilt.",
+    "The inspector enable/disable control, actual activation approval, worker restart/suspension, SPA-only navigation, negative target policies, frame cases and public-domain activation/reinjection were not tested here.",
+    "DOM removal/restoration does not prove in-flight cancellation. The removed-descriptor UnknownError is generic; it is not evidence of a NotFoundError or a diagnosed out-of-memory condition.",
+    "The inventory also contained an uninvoked search_items tool with an empty schema. Only search_products was invoked; inventory was never claimed to be empty after its removal.",
+    "All effects and data were synthetic. No authenticated session, real credential, consequential action, or separately acting human participant was used.",
+    "The prior audit's retry/password-read/server defects remain unfixed. Successful normal calls do not settle ambiguous delivery or security boundaries.",
+    "Canonical config/editor/discovery/transfer, judging setup, submission prerequisites and conditional Reddit access remain outside this component proof."
+  ]
+}

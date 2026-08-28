@@ -1,0 +1,169 @@
+{
+  "recordedAt": "2026-08-28T15:30:49.061Z",
+  "auditedCommit": "4eaf27b6c79ded42cb6782b4e57e614d779bf7fb",
+  "scope": "Pre-build blocker audit. No runtime fixes, extension installation, new native-browser proof, public deployment, or repository-visibility changes were performed.",
+  "diagnosticRun": {
+    "command": "node spikes/blocker-audit/check.mjs",
+    "exitCode": 1,
+    "exitCodeMeaning": "The diagnostic intentionally exits 1 while a probed unsafe behavior is observable; this is not a passing regression suite.",
+    "probeSha256": "e8770005dd959b80b079f4cb4fc3c3626e74269ebbeaa3e2a69be899cb4d0105",
+    "output": {
+      "scope": "Source-level synthetic audit probes only; not live browser, installed MV3, native agent, or complete security verification.",
+      "node": "v22.23.1",
+      "dependencyVersions": {
+        "esbuild": "0.24.2",
+        "jsdom": "26.1.0"
+      },
+      "sourceSha256": {
+        "extension/service-worker/service-worker.ts": "f702f7165141d980bcf30fcf88a0f286792a2293afbba70164fb853653856f60",
+        "core/execution/execute.ts": "93b1733c77446a14b4aafaac77dcbeaf298e86246e0de6448832b92cc8212212",
+        "scripts/serve-demo.mjs": "afee579ca51efe102991c3f166034abb508688de984c0190ed7c3e1c096c1013"
+      },
+      "checks": {
+        "uncertainActionRetry": {
+          "condition": "A mocked first delivery takes effect, then rejects; reinjection succeeds and the retry remains actionable.",
+          "actionCount": 2,
+          "injectionWorlds": ["MAIN", "ISOLATED"],
+          "finalOk": true,
+          "findingObserved": true
+        },
+        "sensitiveRead": {
+          "condition": "An explicit read capability targets a synthetic password input in jsdom. This does not demonstrate automatic scanning or native exfiltration.",
+          "success": true,
+          "status": "completed",
+          "returnedSyntheticSecret": true,
+          "findingObserved": true
+        },
+        "demoServerPaths": {
+          "condition": "Actual request-handler source with mocked readFile/createServer; no HTTP listener, sibling file, or real outside-root read is created.",
+          "requests": [
+            {
+              "requestUrl": "/index.html",
+              "status": 200,
+              "error": null,
+              "attemptedReads": ["demo/site/index.html"]
+            },
+            {
+              "requestUrl": "/%E0%A4%A",
+              "status": null,
+              "error": {
+                "name": "URIError",
+                "message": "URI malformed"
+              },
+              "attemptedReads": []
+            },
+            {
+              "requestUrl": "/..%2fsite-audit%2fprobe.txt",
+              "status": 200,
+              "error": null,
+              "attemptedReads": ["demo/site-audit/probe.txt"]
+            }
+          ],
+          "malformedRequestRejectedOutsideHandler": true,
+          "siblingPrefixAccepted": true,
+          "findingObserved": true
+        }
+      }
+    }
+  },
+  "repositoryMetadata": {
+    "command": "gh repo view ngqinzhe/webmcp-studio --json nameWithOwner,visibility,url,licenseInfo,homepageUrl",
+    "exitCode": 0,
+    "result": {
+      "nameWithOwner": "ngqinzhe/webmcp-studio",
+      "visibility": "PRIVATE",
+      "licenseInfo": null,
+      "homepageUrl": ""
+    },
+    "provenance": "Projected from the successful delegated read-only GitHub query, retained in /private/tmp and inspected by the primary agent; the requested url field is omitted.",
+    "limitation": "An empty homepageUrl and absent repository assets do not establish that no deployment or video exists elsewhere."
+  },
+  "dependencyAudit": {
+    "command": "npm audit --json --package-lock-only --ignore-scripts --cache /private/tmp/webmcp-blocker-audit-AeDzND/npm-cache",
+    "directory": "/private/tmp/webmcp-blocker-audit-AeDzND",
+    "snapshot": {
+      "auditDir": "/private/tmp/webmcp-blocker-audit-AeDzND",
+      "installedPackages": 102,
+      "lockfileSha256": "991a89d1262a087d28b5c432602b8fc348fd569f7acb23c496e02144537b4351",
+      "purpose": "Audit exact installed dependency snapshot; not a reproducible repository lockfile"
+    },
+    "provenance": "Summary of the successful npm registry audit output. A sandbox DNS failure was followed by an approved network retry. No dependencies were installed or changed.",
+    "exitCode": 1,
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 1,
+      "high": 0,
+      "critical": 0,
+      "total": 1
+    },
+    "advisory": {
+      "package": "esbuild",
+      "installedVersion": "0.24.2",
+      "id": "GHSA-67mh-4wv8-2f99",
+      "url": "https://github.com/evanw/esbuild/security/advisories/GHSA-67mh-4wv8-2f99",
+      "affected": "<=0.24.2",
+      "patched": ">=0.25.0",
+      "reportedFixVersion": "0.28.2"
+    },
+    "applicability": "The advisory concerns esbuild serve. Reviewed project scripts call esbuild build and use custom node:http servers, not esbuild serve. This is a code-path assessment, not a general security clearance.",
+    "reproducibilityLimit": "The temporary lock represents the installed local tree, with a root entry added for npm audit. It is not a clean-install proof or a committed lockfile."
+  },
+  "packaging": {
+    "manifestMatchesSource": true,
+    "entrypoints": [
+      {
+        "file": "service-worker.js",
+        "exists": true,
+        "bytes": 5806
+      },
+      {
+        "file": "main-world.js",
+        "exists": true,
+        "bytes": 38071
+      },
+      {
+        "file": "content.js",
+        "exists": true,
+        "bytes": 198670
+      },
+      {
+        "file": "inspector/index.html",
+        "exists": true,
+        "bytes": 4902
+      },
+      {
+        "file": "inspector/inspector.js",
+        "exists": true,
+        "bytes": 29433
+      },
+      {
+        "file": "inspector/style.css",
+        "exists": true,
+        "bytes": 8952
+      }
+    ],
+    "hostPermissions": ["http://127.0.0.1/*", "http://localhost/*"],
+    "minimumChrome": "120"
+  },
+  "repositorySetup": {
+    "committedDependencyLockfile": false,
+    "committedNodeVersionPin": false,
+    "committedCIWorkflow": false,
+    "teammateFreshSetupVerified": false
+  },
+  "browserAudit": {
+    "newLiveBrowserCalls": 0,
+    "projectExtensionInstalledByThisTask": false,
+    "explicitInstallationPermission": "Requested asynchronously; no approval recorded when this report was captured.",
+    "existingNativeEvidence": "docs/feasibility/native-runtime-reviewed-2026-08-28.json",
+    "existingChromeFailureEvidence": "docs/feasibility/chrome-relaunch-2026-08-28.json",
+    "limitation": "Existing Codex native component success and Chrome page registration do not close the coherent chosen-ChatGPT G1-G3 route."
+  },
+  "baselineVerification": {
+    "source": "docs/feasibility/2026-08-28.md",
+    "build": "Previously passed at the audited baseline; not rerun for this documentation/probe-only audit.",
+    "unitTests": "Previously 94 passed across 14 files; not rerun for unchanged runtime code.",
+    "existingPlaywrightNativeProof": false
+  }
+}
