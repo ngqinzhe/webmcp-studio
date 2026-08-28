@@ -17,5 +17,13 @@
     "types": ["chrome", "node", "vitest/globals"],
     "noEmit": true
   },
-  "include": ["core", "sdk", "adapters", "extension", "tests", "scripts/*.mjs"]
+  "include": [
+    "core",
+    "sdk",
+    "adapters",
+    "extension",
+    "tests",
+    "scripts/*.mjs",
+    "spikes/**/*.ts"
+  ]
 }

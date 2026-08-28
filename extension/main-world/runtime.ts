@@ -78,6 +78,7 @@ export interface MainWorldRuntimeOptions {
 interface RegisteredTool {
   descriptor: WebMcpToolDescriptor;
   handle?: unknown;
+  abortController?: AbortController;
 }
 
 interface PendingInvocation {
@@ -95,6 +96,7 @@ interface DocumentWithModelContext extends Document {
 interface ContextInspection {
   apiMethods: string[];
   nativeTools: NativeToolSummary[];
+  toolNames: ReadonlySet<string>;
   nativeInventoryKnown: boolean;
 }
 
@@ -264,14 +266,20 @@ function emptyStatus(): WebMcpStatus {
   };
 }
 
+function nativeToolName(value: unknown): string | null {
+  const name =
+    typeof value === "string"
+      ? value
+      : isRecord(value) && typeof value.name === "string"
+        ? value.name
+        : "";
+  return name.trim() || null;
+}
+
 function normalizeNativeTool(value: unknown): NativeToolSummary | null {
-  if (typeof value === "string") {
-    const name = value.trim();
-    return name ? { name } : null;
-  }
-  if (!isRecord(value) || typeof value.name !== "string") return null;
-  const name = value.name.trim();
-  if (!name) return null;
+  const name = nativeToolName(value);
+  if (name === null) return null;
+  if (!isRecord(value)) return { name };
 
   const summary: NativeToolSummary = { name };
   if (typeof value.description === "string") {
@@ -283,28 +291,36 @@ function normalizeNativeTool(value: unknown): NativeToolSummary | null {
   return summary;
 }
 
-function collectToolCandidates(value: unknown, output: unknown[]): void {
+function collectToolCandidates(value: unknown, output: unknown[]): boolean {
   if (Array.isArray(value)) {
     output.push(...value);
-    return;
+    return value.every((candidate) => nativeToolName(candidate) !== null);
   }
-  if (!isRecord(value)) return;
+  if (!isRecord(value)) return false;
 
   if (Array.isArray(value.tools)) {
-    output.push(...value.tools);
-    return;
+    return collectToolCandidates(value.tools, output);
   }
-  if (typeof value.name === "string") {
+  if (nativeToolName(value) !== null) {
     output.push(value);
-    return;
+    return true;
   }
 
-  // Some hosts expose a name → definition map rather than an array.
-  for (const candidate of Object.values(value)) {
-    if (isRecord(candidate) && typeof candidate.name === "string") {
+  // Some hosts expose a plain name → definition object rather than an array.
+  // Other objects, including Map, must not be mistaken for an empty inventory.
+  const prototype: unknown = Object.getPrototypeOf(value);
+  if (prototype !== null && Object.getPrototypeOf(prototype) !== null) {
+    return false;
+  }
+  const candidates = Object.values(value);
+  for (const candidate of candidates) {
+    if (isRecord(candidate) && nativeToolName(candidate) !== null) {
       output.push(candidate);
     }
   }
+  return candidates.every(
+    (candidate) => isRecord(candidate) && nativeToolName(candidate) !== null,
+  );
 }
 
 function normalizeNativeTools(
@@ -753,8 +769,9 @@ export class MainWorldWebMcpRuntime {
       if (!method) continue;
       try {
         const value = await method.call(context);
-        nativeInventoryKnown = true;
-        collectToolCandidates(value, candidates);
+        if (collectToolCandidates(value, candidates)) {
+          nativeInventoryKnown = true;
+        }
       } catch {
         // A host may expose a discovery method behind a permission gate.  The
         // registration path remains usable; only native deduplication is less
@@ -766,19 +783,44 @@ export class MainWorldWebMcpRuntime {
       try {
         const value = context[propertyName];
         if (value === undefined) continue;
-        nativeInventoryKnown = true;
-        collectToolCandidates(value, candidates);
+        if (collectToolCandidates(value, candidates)) {
+          nativeInventoryKnown = true;
+        }
       } catch {
         // Treat throwing getters as an unavailable native inventory.
       }
     }
 
-    const inferredNames = new Set(this.registered.keys());
+    const toolNames = new Set<string>();
+    for (const candidate of candidates) {
+      const name = nativeToolName(candidate);
+      if (name !== null) toolNames.add(name);
+    }
     return {
       apiMethods,
-      nativeTools: normalizeNativeTools(candidates, inferredNames),
+      nativeTools: normalizeNativeTools(
+        candidates,
+        new Set(this.registered.keys()),
+      ),
+      toolNames,
       nativeInventoryKnown,
     };
+  }
+
+  private reconcileAbortedRegistrations(inspection: ContextInspection): void {
+    if (!inspection.nativeInventoryKnown) return;
+    for (const [name, registration] of this.registered) {
+      if (
+        registration.abortController?.signal.aborted &&
+        !inspection.toolNames.has(name)
+      ) {
+        // A previous abort can succeed even when its immediate inventory check
+        // fails. Resolve that uncertainty before an unchanged descriptor skips
+        // registration, otherwise re-enabling would leave the tool absent.
+        this.registered.delete(name);
+        this.rejected.delete(name);
+      }
+    }
   }
 
   private async inspectStatus(): Promise<WebMcpStatus> {
@@ -792,6 +834,7 @@ export class MainWorldWebMcpRuntime {
 
     const inspection = await this.inspectContext(context);
     this.nativeInventoryKnown = inspection.nativeInventoryKnown;
+    this.reconcileAbortedRegistrations(inspection);
     this.currentStatus = this.makeStatus(
       true,
       inspection.apiMethods,
@@ -810,8 +853,14 @@ export class MainWorldWebMcpRuntime {
 
     const inspection = context
       ? await this.inspectContext(context)
-      : { apiMethods: [], nativeTools: [], nativeInventoryKnown: false };
+      : {
+          apiMethods: [],
+          nativeTools: [],
+          toolNames: new Set<string>(),
+          nativeInventoryKnown: false,
+        };
     this.nativeInventoryKnown = inspection.nativeInventoryKnown;
+    this.reconcileAbortedRegistrations(inspection);
     const nativeTools = nativeToolsOverride
       ? normalizeNativeTools(
           nativeToolsOverride,
@@ -908,7 +957,7 @@ export class MainWorldWebMcpRuntime {
 
       const updated = await this.updateOne(context, descriptor);
       if (updated) {
-        this.registered.set(name, { descriptor, handle: existing.handle });
+        this.registered.set(name, { ...existing, descriptor });
         this.rejected.delete(name);
         continue;
       }
@@ -941,12 +990,21 @@ export class MainWorldWebMcpRuntime {
       return false;
     }
 
+    const abortController =
+      single?.name === "registerTool" ? new AbortController() : undefined;
     try {
       const handle = single
-        ? await this.callAndGet(single, context, [registration])
+        ? await this.callAndGet(
+            single,
+            context,
+            abortController
+              ? [registration, { signal: abortController.signal }]
+              : [registration],
+          )
         : await this.callAndGet(batch!, context, [[registration]]);
       const accepted = handle !== false;
       if (!accepted) {
+        abortController?.abort();
         this.rejected.set(
           descriptor.name,
           "The model context returned false while registering the inferred tool.",
@@ -955,10 +1013,12 @@ export class MainWorldWebMcpRuntime {
       }
       const registered: RegisteredTool = { descriptor };
       if (handle !== undefined) registered.handle = handle;
+      if (abortController) registered.abortController = abortController;
       this.registered.set(descriptor.name, registered);
       this.rejected.delete(descriptor.name);
       return true;
     } catch (error) {
+      abortController?.abort();
       this.rejected.set(descriptor.name, safeErrorMessage(error));
       return false;
     }
@@ -992,20 +1052,44 @@ export class MainWorldWebMcpRuntime {
     names: readonly string[],
     nativeTools: readonly NativeToolSummary[],
   ): Promise<RemoveResult | null> {
-    const removedByHandle = new Set<string>();
+    const removedIndividually = new Set<string>();
+    const aborted = new Set<string>();
+    let remainingNativeTools = nativeTools;
     for (const name of names) {
       const registration = this.registered.get(name);
-      if (!registration || registration.handle === undefined) continue;
-      if (await this.removeByHandle(registration.handle)) {
-        removedByHandle.add(name);
+      if (!registration) continue;
+      if (
+        registration.handle !== undefined &&
+        (await this.removeByHandle(registration.handle))
+      ) {
+        removedIndividually.add(name);
+      } else if (registration.abortController && this.nativeInventoryKnown) {
+        registration.abortController.abort();
+        aborted.add(name);
       }
     }
-    const remaining = names.filter((name) => !removedByHandle.has(name));
-    if (remaining.length === 0) return { names: removedByHandle };
+    if (aborted.size > 0) {
+      // Current registerTool removes registrations through AbortSignal. Older
+      // hosts may silently ignore that option, so verify removal before claiming
+      // success. Without readable inventory, retain the registration and use
+      // the explicit legacy removal fallbacks below.
+      const inspection = await this.inspectContext(context);
+      this.nativeInventoryKnown = inspection.nativeInventoryKnown;
+      remainingNativeTools = [...inspection.toolNames]
+        .filter((name) => !this.registered.has(name))
+        .map((name) => ({ name }));
+      if (inspection.nativeInventoryKnown) {
+        for (const name of aborted) {
+          if (!inspection.toolNames.has(name)) removedIndividually.add(name);
+        }
+      }
+    }
+    const remaining = names.filter((name) => !removedIndividually.has(name));
+    if (remaining.length === 0) return { names: removedIndividually };
 
     const single = this.findMethod(context, SINGLE_REMOVE_METHODS);
     if (single) {
-      const removed = new Set(removedByHandle);
+      const removed = new Set(removedIndividually);
       for (const name of remaining) {
         try {
           if (await this.callAndCheck(single, context, [name])) {
@@ -1033,14 +1117,18 @@ export class MainWorldWebMcpRuntime {
         for (const name of remaining)
           this.rejected.set(name, safeErrorMessage(error));
       }
-      return { names: removedByHandle };
+      return { names: removedIndividually };
     }
 
     const clear = this.findMethod(context, CLEAR_METHODS);
     // Clearing a model context is only safe when the host let us inspect its
     // native inventory and that inventory is empty.  Never clear blindly: it
     // could remove page-provided native tools.
-    if (clear && nativeTools.length === 0 && this.nativeInventoryKnown) {
+    if (
+      clear &&
+      remainingNativeTools.length === 0 &&
+      this.nativeInventoryKnown
+    ) {
       try {
         if (await this.callAndCheck(clear, context, [])) {
           const removed = new Set(this.registered.keys());
@@ -1052,7 +1140,7 @@ export class MainWorldWebMcpRuntime {
           this.rejected.set(name, safeErrorMessage(error));
       }
     }
-    return removedByHandle.size > 0 ? { names: removedByHandle } : null;
+    return removedIndividually.size > 0 ? { names: removedIndividually } : null;
   }
 
   private findMethod(

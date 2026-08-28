@@ -1,0 +1,506 @@
+{
+  "recordedAt": "2026-08-28T13:22:00.191Z",
+  "documentationCommit": "dd4d2f0a62ee4b1c11032b462c005c3bb8a4d156",
+  "consumer": "Codex In-app Browser via the Browser plugin's native WebMCP fetchTools/call interface",
+  "separatelyStartedChatGPTSession": false,
+  "humanParticipantInThisRun": false,
+  "environment": {
+    "origin": "http://127.0.0.1:4174",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "secureContext": true,
+    "topLevel": true,
+    "modelContextPresent": true,
+    "registerTool": "function",
+    "unregisterTool": "undefined",
+    "apiMockedByFixture": false,
+    "extensionBridgeImplemented": false
+  },
+  "registeredTools": "WebMCP tools available in this document:\n[\n  {\n    \"name\": \"studio_get_guide\",\n    \"description\": \"Read this local feasibility fixture's guide, next step, and blockers. Does not edit anything or access other websites.\",\n    \"inputSchema\": {\n      \"additionalProperties\": false,\n      \"properties\": {},\n      \"type\": \"object\"\n    },\n    \"annotations\": {\n      \"readOnlyHint\": true\n    },\n    \"origin\": \"http://127.0.0.1:4174\",\n    \"pageUrl\": \"http://127.0.0.1:4174/\"\n  },\n  {\n    \"name\": \"studio_get_project\",\n    \"description\": \"Read the current local shared draft, including UI edits, revision, and whether agent edits are allowed. No network access.\",\n    \"inputSchema\": {\n      \"additionalProperties\": false,\n      \"properties\": {},\n      \"type\": \"object\"\n    },\n    \"annotations\": {\n      \"readOnlyHint\": true\n    },\n    \"origin\": \"http://127.0.0.1:4174\",\n    \"pageUrl\": \"http://127.0.0.1:4174/\"\n  },\n  {\n    \"name\": \"studio_edit_draft\",\n    \"description\": \"Rename the local draft tool or insert a wait node before its return node. Requires the current expectedRevision. Edits are visible and undoable; nothing is activated and no target website is accessed.\",\n    \"inputSchema\": {\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"expectedRevision\": {\n          \"minimum\": 0,\n          \"type\": \"integer\"\n        },\n        \"kind\": {\n          \"enum\": [\n            \"rename_tool\",\n            \"insert_wait\"\n          ],\n          \"type\": \"string\"\n        },\n        \"value\": {\n          \"maxLength\": 64,\n          \"minLength\": 1,\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"expectedRevision\",\n        \"kind\",\n        \"value\"\n      ],\n      \"type\": \"object\"\n    },\n    \"annotations\": {\n      \"readOnlyHint\": false\n    },\n    \"origin\": \"http://127.0.0.1:4174\",\n    \"pageUrl\": \"http://127.0.0.1:4174/\"\n  }\n]\nCall tools.call(name, input) to invoke one.",
+  "callsAndUiChecks": [
+    {
+      "kind": "native-call",
+      "name": "studio_get_guide",
+      "input": {},
+      "result": {
+        "agentEditsAllowed": true,
+        "blockers": [
+          "The ChatGPT account/app setup has not been verified by this fixture.",
+          "No selected-tab extension bridge is implemented in this fixture.",
+          "This fixture does not perform discovery or activate website tools."
+        ],
+        "fixtureOnly": true,
+        "nextStep": "Read the current draft, then edit it with its expected revision.",
+        "revision": 0
+      }
+    },
+    {
+      "kind": "native-call",
+      "name": "studio_get_project",
+      "input": {},
+      "result": {
+        "agentEditsAllowed": true,
+        "fixtureOnly": true,
+        "revision": 0,
+        "tool": {
+          "name": "search_catalog",
+          "nodes": [
+            {
+              "id": "search",
+              "kind": "dom",
+              "label": "Submit the search form"
+            },
+            {
+              "id": "result",
+              "kind": "return",
+              "label": "Return the search status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "native-call",
+      "name": "studio_edit_draft",
+      "input": {
+        "expectedRevision": 0,
+        "kind": "rename_tool",
+        "value": "search_catalog_native"
+      },
+      "result": {
+        "ok": true,
+        "project": {
+          "agentEditsAllowed": true,
+          "fixtureOnly": true,
+          "revision": 1,
+          "tool": {
+            "name": "search_catalog_native",
+            "nodes": [
+              {
+                "id": "search",
+                "kind": "dom",
+                "label": "Submit the search form"
+              },
+              {
+                "id": "result",
+                "kind": "return",
+                "label": "Return the search status"
+              }
+            ]
+          }
+        }
+      },
+      "visible": {
+        "revision": 1,
+        "agentEditsAllowed": true,
+        "fixtureOnly": true,
+        "tool": {
+          "name": "search_catalog_native",
+          "nodes": [
+            {
+              "id": "search",
+              "kind": "dom",
+              "label": "Submit the search form"
+            },
+            {
+              "id": "result",
+              "kind": "return",
+              "label": "Return the search status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "ui-action",
+      "performedBy": "browser automation, not a human participant",
+      "action": "Add wait step",
+      "visible": {
+        "revision": 2,
+        "agentEditsAllowed": true,
+        "fixtureOnly": true,
+        "tool": {
+          "name": "search_catalog_native",
+          "nodes": [
+            {
+              "id": "search",
+              "kind": "dom",
+              "label": "Submit the search form"
+            },
+            {
+              "id": "wait-2",
+              "kind": "wait",
+              "label": "Wait for visible search results"
+            },
+            {
+              "id": "result",
+              "kind": "return",
+              "label": "Return the search status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "native-call",
+      "name": "studio_get_project",
+      "input": {},
+      "result": {
+        "agentEditsAllowed": true,
+        "fixtureOnly": true,
+        "revision": 2,
+        "tool": {
+          "name": "search_catalog_native",
+          "nodes": [
+            {
+              "id": "search",
+              "kind": "dom",
+              "label": "Submit the search form"
+            },
+            {
+              "id": "wait-2",
+              "kind": "wait",
+              "label": "Wait for visible search results"
+            },
+            {
+              "id": "result",
+              "kind": "return",
+              "label": "Return the search status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "native-call",
+      "name": "studio_edit_draft",
+      "input": {
+        "expectedRevision": 1,
+        "kind": "rename_tool",
+        "value": "must_not_apply"
+      },
+      "result": {
+        "currentRevision": 2,
+        "error": "revision_conflict",
+        "ok": false
+      },
+      "visible": {
+        "revision": 2,
+        "agentEditsAllowed": true,
+        "fixtureOnly": true,
+        "tool": {
+          "name": "search_catalog_native",
+          "nodes": [
+            {
+              "id": "search",
+              "kind": "dom",
+              "label": "Submit the search form"
+            },
+            {
+              "id": "wait-2",
+              "kind": "wait",
+              "label": "Wait for visible search results"
+            },
+            {
+              "id": "result",
+              "kind": "return",
+              "label": "Return the search status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "native-call",
+      "name": "studio_edit_draft",
+      "input": {
+        "expectedRevision": 2,
+        "kind": "insert_wait",
+        "value": "Wait added through native WebMCP"
+      },
+      "result": {
+        "ok": true,
+        "project": {
+          "agentEditsAllowed": true,
+          "fixtureOnly": true,
+          "revision": 3,
+          "tool": {
+            "name": "search_catalog_native",
+            "nodes": [
+              {
+                "id": "search",
+                "kind": "dom",
+                "label": "Submit the search form"
+              },
+              {
+                "id": "wait-2",
+                "kind": "wait",
+                "label": "Wait for visible search results"
+              },
+              {
+                "id": "wait-3",
+                "kind": "wait",
+                "label": "Wait added through native WebMCP"
+              },
+              {
+                "id": "result",
+                "kind": "return",
+                "label": "Return the search status"
+              }
+            ]
+          }
+        }
+      },
+      "visible": {
+        "revision": 3,
+        "agentEditsAllowed": true,
+        "fixtureOnly": true,
+        "tool": {
+          "name": "search_catalog_native",
+          "nodes": [
+            {
+              "id": "search",
+              "kind": "dom",
+              "label": "Submit the search form"
+            },
+            {
+              "id": "wait-2",
+              "kind": "wait",
+              "label": "Wait for visible search results"
+            },
+            {
+              "id": "wait-3",
+              "kind": "wait",
+              "label": "Wait added through native WebMCP"
+            },
+            {
+              "id": "result",
+              "kind": "return",
+              "label": "Return the search status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "ui-action",
+      "performedBy": "browser automation, not a human participant",
+      "action": "Undo last edit",
+      "visible": {
+        "revision": 4,
+        "agentEditsAllowed": true,
+        "fixtureOnly": true,
+        "tool": {
+          "name": "search_catalog_native",
+          "nodes": [
+            {
+              "id": "search",
+              "kind": "dom",
+              "label": "Submit the search form"
+            },
+            {
+              "id": "wait-2",
+              "kind": "wait",
+              "label": "Wait for visible search results"
+            },
+            {
+              "id": "result",
+              "kind": "return",
+              "label": "Return the search status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "native-call",
+      "name": "studio_get_project",
+      "input": {},
+      "result": {
+        "agentEditsAllowed": true,
+        "fixtureOnly": true,
+        "revision": 4,
+        "tool": {
+          "name": "search_catalog_native",
+          "nodes": [
+            {
+              "id": "search",
+              "kind": "dom",
+              "label": "Submit the search form"
+            },
+            {
+              "id": "wait-2",
+              "kind": "wait",
+              "label": "Wait for visible search results"
+            },
+            {
+              "id": "result",
+              "kind": "return",
+              "label": "Return the search status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "native-call",
+      "name": "studio_edit_draft",
+      "input": {
+        "expectedRevision": 4,
+        "kind": "rename_tool",
+        "value": "Invalid Tool Name"
+      },
+      "result": {
+        "currentRevision": 4,
+        "error": "invalid_value",
+        "ok": false
+      },
+      "visible": {
+        "revision": 4,
+        "agentEditsAllowed": true,
+        "fixtureOnly": true,
+        "tool": {
+          "name": "search_catalog_native",
+          "nodes": [
+            {
+              "id": "search",
+              "kind": "dom",
+              "label": "Submit the search form"
+            },
+            {
+              "id": "wait-2",
+              "kind": "wait",
+              "label": "Wait for visible search results"
+            },
+            {
+              "id": "result",
+              "kind": "return",
+              "label": "Return the search status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "ui-action",
+      "performedBy": "browser automation, not a human participant",
+      "action": "Revoke agent draft edits",
+      "visible": {
+        "revision": 5,
+        "agentEditsAllowed": false,
+        "fixtureOnly": true,
+        "tool": {
+          "name": "search_catalog_native",
+          "nodes": [
+            {
+              "id": "search",
+              "kind": "dom",
+              "label": "Submit the search form"
+            },
+            {
+              "id": "wait-2",
+              "kind": "wait",
+              "label": "Wait for visible search results"
+            },
+            {
+              "id": "result",
+              "kind": "return",
+              "label": "Return the search status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "native-call",
+      "name": "studio_edit_draft",
+      "input": {
+        "expectedRevision": 5,
+        "kind": "rename_tool",
+        "value": "must_not_apply"
+      },
+      "result": {
+        "currentRevision": 5,
+        "error": "agent_edits_revoked",
+        "ok": false
+      },
+      "visible": {
+        "revision": 5,
+        "agentEditsAllowed": false,
+        "fixtureOnly": true,
+        "tool": {
+          "name": "search_catalog_native",
+          "nodes": [
+            {
+              "id": "search",
+              "kind": "dom",
+              "label": "Submit the search form"
+            },
+            {
+              "id": "wait-2",
+              "kind": "wait",
+              "label": "Wait for visible search results"
+            },
+            {
+              "id": "result",
+              "kind": "return",
+              "label": "Return the search status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "native-call",
+      "name": "studio_get_guide",
+      "input": {},
+      "result": {
+        "agentEditsAllowed": false,
+        "blockers": [
+          "Agent draft edits are revoked.",
+          "The ChatGPT account/app setup has not been verified by this fixture.",
+          "No selected-tab extension bridge is implemented in this fixture.",
+          "This fixture does not perform discovery or activate website tools."
+        ],
+        "fixtureOnly": true,
+        "nextStep": "Agent editing is revoked. Keep the draft read-only until the human starts a new experiment.",
+        "revision": 5
+      }
+    }
+  ],
+  "uninstrumentedTarget": {
+    "environment": {
+      "origin": "http://127.0.0.1:4174",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "secureContext": true,
+      "modelContextPresent": true,
+      "registerTool": "function",
+      "toolsRegisteredByPage": 0,
+      "apiMockedByFixture": false
+    },
+    "toolInventory": "No WebMCP tools are available in this document."
+  },
+  "localChromeConnection": {
+    "available": false,
+    "browserClientError": "Browser is not available: chrome",
+    "supportedDiagnostic": "Google Chrome running: no",
+    "installedChromeVersion": "151.0.7922.170",
+    "chatgptExtensionInstalledAndEnabled": true,
+    "nativeHostDiagnosticPassed": true
+  },
+  "limitations": [
+    "Only native shared-authoring mechanics were proved in Codex; G1 in the chosen ChatGPT app/account remains open.",
+    "UI actions were performed by browser automation, not a human participant.",
+    "The uninstrumented target had zero native tools. No extension was loaded in the tested browser.",
+    "G2 selected-tab connection and G3 native invocation of extension-injected tools were not proved.",
+    "No authentication session, Reddit access, canonical discovery, export/import, or activation was tested."
+  ],
+  "sourceSha256": {
+    "spikes/native-webmcp/index.html": "417cfc79154c7e176ddf58c453eca73f3c18ef0519dda7ef18e3aee33b8156c7",
+    "spikes/native-webmcp/serve.mjs": "437ed27a316b011aed800dfc06c18e331a67875837f1c668587a3dcc61763319",
+    "spikes/native-webmcp/studio.mjs": "18933239c412cc92237e0f34b13bcf7bb3885bb349bf488655dee01e5ebaf1ca",
+    "spikes/native-webmcp/style.css": "e5a5fb20716d0c434dfa84e38e2717c36df037bae53e0abe57156ad2ac74517a",
+    "spikes/native-webmcp/target.html": "d6db7f11a18606749e1310d2a4e3ce7dc5c3d8c4b96a9b64f659b05018495791",
+    "spikes/native-webmcp/target.mjs": "554c1cc59f08c2adca088cbf416fd95c82d27f7c149661dd4aaa81e9ce74fd17",
+    "package.json": "a9a2e8ece9cac6796d4f0a80d0ac9d094d8bb8394b6c6c7c654854dd42537b39"
+  }
+}

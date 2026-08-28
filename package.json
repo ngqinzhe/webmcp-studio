@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "test:e2e": "npm run build:extension && playwright test",
     "demo": "node scripts/serve-demo.mjs",
+    "spike:native": "node spikes/native-webmcp/serve.mjs",
     "format:check": "prettier --check . --ignore-path .prettierignore"
   },
   "devDependencies": {

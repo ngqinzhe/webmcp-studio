@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Native execution runtime · Component proof</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/runtime.js"></script>
+  </head>
+  <body>
+    <main>
+      <h1>Native execution runtime</h1>
+      <p>
+        This fixture runs the repository's real scanner, compiler, message
+        bridge, and DOM executor against the browser-provided WebMCP API. Both
+        runtime halves execute in this page's JavaScript world. It is not an
+        installed MV3 extension or proof of the local Chrome connection.
+      </p>
+      <p id="runtime-status" role="status">Starting the runtime…</p>
+      <section aria-label="Product catalog">
+        <h2>Search the local catalog</h2>
+        <form id="product-search" aria-label="Product search" method="get">
+          <label for="query">Search products</label>
+          <input id="query" name="q" type="search" required />
+          <label for="category">Filter by category</label>
+          <select id="category" name="category">
+            <option value="all">All products</option>
+            <option value="keyboards">Keyboards</option>
+            <option value="audio">Audio</option>
+          </select>
+          <button type="submit">Search products</button>
+        </form>
+        <p id="search-status" role="status">No search has run.</p>
+        <p>Form submissions: <output id="submission-count">0</output></p>
+      </section>
+      <section aria-label="Component diagnostics">
+        <h2>Component diagnostics</h2>
+        <p>These controls affect only this local fixture's runtime.</p>
+        <button id="disable-runtime" type="button">
+          Disable inferred tools
+        </button>
+        <button id="enable-runtime" type="button">Enable inferred tools</button>
+        <button id="refresh-diagnostics" type="button">
+          Refresh diagnostics
+        </button>
+        <pre id="diagnostics" aria-label="Runtime diagnostics"></pre>
+      </section>
+    </main>
+  </body>
+</html>

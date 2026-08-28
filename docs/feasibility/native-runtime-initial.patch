@@ -1,0 +1,258 @@
+diff --git a/extension/main-world/runtime.ts b/extension/main-world/runtime.ts
+index 68716839745214a4de6f8a10f7ddb8b301d18806..58344fdbaad6e478fa476acc00b0cc37b2ae7086 100644
+--- a/extension/main-world/runtime.ts
++++ b/extension/main-world/runtime.ts
+@@ -78,6 +78,7 @@ export interface MainWorldRuntimeOptions {
+ interface RegisteredTool {
+   descriptor: WebMcpToolDescriptor;
+   handle?: unknown;
++  abortController?: AbortController;
+ }
+ 
+ interface PendingInvocation {
+@@ -741,6 +742,7 @@ export class MainWorldWebMcpRuntime {
+ 
+   private async inspectContext(
+     context: ModelContextLike,
++    includeInferred = false,
+   ): Promise<ContextInspection> {
+     const apiMethods = MODEL_CONTEXT_METHODS.filter((name) =>
+       Boolean(methodAt(context, name)),
+@@ -773,7 +775,9 @@ export class MainWorldWebMcpRuntime {
+       }
+     }
+ 
+-    const inferredNames = new Set(this.registered.keys());
++    const inferredNames = includeInferred
++      ? new Set<string>()
++      : new Set(this.registered.keys());
+     return {
+       apiMethods,
+       nativeTools: normalizeNativeTools(candidates, inferredNames),
+@@ -908,7 +912,7 @@ export class MainWorldWebMcpRuntime {
+ 
+       const updated = await this.updateOne(context, descriptor);
+       if (updated) {
+-        this.registered.set(name, { descriptor, handle: existing.handle });
++        this.registered.set(name, { ...existing, descriptor });
+         this.rejected.delete(name);
+         continue;
+       }
+@@ -941,12 +945,21 @@ export class MainWorldWebMcpRuntime {
+       return false;
+     }
+ 
++    const abortController =
++      single?.name === "registerTool" ? new AbortController() : undefined;
+     try {
+       const handle = single
+-        ? await this.callAndGet(single, context, [registration])
++        ? await this.callAndGet(
++            single,
++            context,
++            abortController
++              ? [registration, { signal: abortController.signal }]
++              : [registration],
++          )
+         : await this.callAndGet(batch!, context, [[registration]]);
+       const accepted = handle !== false;
+       if (!accepted) {
++        abortController?.abort();
+         this.rejected.set(
+           descriptor.name,
+           "The model context returned false while registering the inferred tool.",
+@@ -955,10 +968,12 @@ export class MainWorldWebMcpRuntime {
+       }
+       const registered: RegisteredTool = { descriptor };
+       if (handle !== undefined) registered.handle = handle;
++      if (abortController) registered.abortController = abortController;
+       this.registered.set(descriptor.name, registered);
+       this.rejected.delete(descriptor.name);
+       return true;
+     } catch (error) {
++      abortController?.abort();
+       this.rejected.set(descriptor.name, safeErrorMessage(error));
+       return false;
+     }
+@@ -992,20 +1007,42 @@ export class MainWorldWebMcpRuntime {
+     names: readonly string[],
+     nativeTools: readonly NativeToolSummary[],
+   ): Promise<RemoveResult | null> {
+-    const removedByHandle = new Set<string>();
++    const removedIndividually = new Set<string>();
++    const aborted = new Set<string>();
+     for (const name of names) {
+       const registration = this.registered.get(name);
+-      if (!registration || registration.handle === undefined) continue;
+-      if (await this.removeByHandle(registration.handle)) {
+-        removedByHandle.add(name);
++      if (!registration) continue;
++      if (
++        registration.handle !== undefined &&
++        (await this.removeByHandle(registration.handle))
++      ) {
++        removedIndividually.add(name);
++      } else if (registration.abortController && this.nativeInventoryKnown) {
++        registration.abortController.abort();
++        aborted.add(name);
+       }
+     }
+-    const remaining = names.filter((name) => !removedByHandle.has(name));
+-    if (remaining.length === 0) return { names: removedByHandle };
++    if (aborted.size > 0) {
++      // Current registerTool removes registrations through AbortSignal. Older
++      // hosts may silently ignore that option, so verify removal before claiming
++      // success. Without readable inventory, retain the registration and use
++      // the explicit legacy removal fallbacks below.
++      const inspection = await this.inspectContext(context, true);
++      if (inspection.nativeInventoryKnown) {
++        const visibleNames = new Set(
++          inspection.nativeTools.map((tool) => tool.name),
++        );
++        for (const name of aborted) {
++          if (!visibleNames.has(name)) removedIndividually.add(name);
++        }
++      }
++    }
++    const remaining = names.filter((name) => !removedIndividually.has(name));
++    if (remaining.length === 0) return { names: removedIndividually };
+ 
+     const single = this.findMethod(context, SINGLE_REMOVE_METHODS);
+     if (single) {
+-      const removed = new Set(removedByHandle);
++      const removed = new Set(removedIndividually);
+       for (const name of remaining) {
+         try {
+           if (await this.callAndCheck(single, context, [name])) {
+@@ -1033,7 +1070,7 @@ export class MainWorldWebMcpRuntime {
+         for (const name of remaining)
+           this.rejected.set(name, safeErrorMessage(error));
+       }
+-      return { names: removedByHandle };
++      return { names: removedIndividually };
+     }
+ 
+     const clear = this.findMethod(context, CLEAR_METHODS);
+@@ -1052,7 +1089,7 @@ export class MainWorldWebMcpRuntime {
+           this.rejected.set(name, safeErrorMessage(error));
+       }
+     }
+-    return removedByHandle.size > 0 ? { names: removedByHandle } : null;
++    return removedIndividually.size > 0 ? { names: removedIndividually } : null;
+   }
+ 
+   private findMethod(
+diff --git a/tests/unit/main-world.test.ts b/tests/unit/main-world.test.ts
+index aa6d6dbc980d6f46265e2f3633a7e7d3c5b84fa7..680885322769e7b2aeac999499735b60f39880d4 100644
+--- a/tests/unit/main-world.test.ts
++++ b/tests/unit/main-world.test.ts
+@@ -191,6 +191,109 @@ describe("MAIN-world WebMCP runtime", () => {
+     expect(runtime.getStatusSnapshot().registered).toEqual([]);
+   });
+ 
++  it("replaces, disables, and re-enables registrations using AbortSignal", async () => {
++    const nativeTool = { name: "native_status", description: "Page status." };
++    const tools = new Map<string, { name: string; description: string }>([
++      [nativeTool.name, nativeTool],
++    ]);
++    const signals: (AbortSignal | undefined)[] = [];
++    setModelContext({
++      registerTool(
++        tool: WebMcpToolRegistration,
++        { signal }: { signal?: AbortSignal } = {},
++      ) {
++        if (tools.has(tool.name)) throw new Error("Duplicate registration");
++        tools.set(tool.name, tool);
++        signals.push(signal);
++        signal?.addEventListener("abort", () => tools.delete(tool.name), {
++          once: true,
++        });
++      },
++      getTools: () => [...tools.values()],
++    });
++    const runtime = new MainWorldWebMcpRuntime({ window, document });
++
++    const initial = await runtime.syncCapabilities([capability()]);
++    expect(initial.registered).toEqual(["search_products"]);
++
++    await runtime.syncCapabilities([
++      capability({ description: "Updated search description." }),
++    ]);
++    expect(signals[0]?.aborted).toBe(true);
++    expect(signals[1]?.aborted).toBe(false);
++    expect(tools.get("search_products")?.description).toBe(
++      "Updated search description.",
++    );
++
++    const disabled = await runtime.syncCapabilities([capability()], false);
++    expect(signals[1]?.aborted).toBe(true);
++    expect(disabled.registered).toEqual([]);
++    expect(disabled.rejected).toEqual([]);
++    expect([...tools.values()]).toEqual([nativeTool]);
++
++    const enabled = await runtime.syncCapabilities([capability()], true);
++    expect(enabled.registered).toEqual(["search_products"]);
++    expect(signals[2]?.aborted).toBe(false);
++    expect(tools.get(nativeTool.name)).toBe(nativeTool);
++  });
++
++  it.each([false, true])(
++    "handles ignored registration signals with explicit removal available: %s",
++    async (hasExplicitRemoval) => {
++      const tools = new Map<string, WebMcpToolRegistration>();
++      const unregisterTool = vi.fn((name: string) => tools.delete(name));
++      setModelContext({
++        registerTool(tool: WebMcpToolRegistration) {
++          tools.set(tool.name, tool);
++        },
++        getTools: () => [...tools.values()],
++        ...(hasExplicitRemoval ? { unregisterTool } : {}),
++      });
++      const runtime = new MainWorldWebMcpRuntime({ window, document });
++      await runtime.syncCapabilities([capability()]);
++
++      const disabled = await runtime.syncCapabilities([capability()], false);
++      if (hasExplicitRemoval) {
++        expect(unregisterTool).toHaveBeenCalledWith("search_products");
++        expect(disabled.registered).toEqual([]);
++        expect(tools.size).toBe(0);
++      } else {
++        expect(disabled.registered).toEqual(["search_products"]);
++        expect(disabled.rejected).toEqual([
++          {
++            name: "search_products",
++            message:
++              "The host exposes no safe method for unregistering this inferred tool.",
++          },
++        ]);
++        expect(tools.has("search_products")).toBe(true);
++      }
++    },
++  );
++
++  it("does not abort a registration when its removal cannot be verified", async () => {
++    let registrationSignal: AbortSignal | undefined;
++    setModelContext({
++      registerTool(
++        _tool: WebMcpToolRegistration,
++        { signal }: { signal?: AbortSignal } = {},
++      ) {
++        registrationSignal = signal;
++      },
++      getTools() {
++        throw new Error("Inventory access denied");
++      },
++    });
++    const runtime = new MainWorldWebMcpRuntime({ window, document });
++    await runtime.syncCapabilities([capability()]);
++
++    const disabled = await runtime.syncCapabilities([capability()], false);
++
++    expect(registrationSignal?.aborted).toBe(false);
++    expect(disabled.registered).toEqual(["search_products"]);
++    expect(disabled.rejected).toHaveLength(1);
++  });
++
+   it("deduplicates a native tool discovered from the model context", async () => {
+     const context = {
+       provideTool: vi.fn(),

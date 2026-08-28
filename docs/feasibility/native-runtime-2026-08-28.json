@@ -1,0 +1,1043 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-08-28T14:24:24.280Z",
+  "sourceBaseCommit": "dd4d2f0a62ee4b1c11032b462c005c3bb8a4d156",
+  "sourceSnapshot": {
+    "status": "historical",
+    "description": "The captured events, source hashes, and verification counts describe the initial native runtime experiment and registration-removal fix, before subsequent edge-case hardening. They do not verify later working-tree changes.",
+    "afterFixReconstruction": {
+      "baseCommit": "dd4d2f0a62ee4b1c11032b462c005c3bb8a4d156",
+      "patch": "docs/feasibility/native-runtime-initial.patch",
+      "patchSha256": "48e2d461ffe223a78672691ed0a7012da9c4d429780a2afc67aaf382849e54ea",
+      "files": [
+        "extension/main-world/runtime.ts",
+        "tests/unit/main-world.test.ts"
+      ],
+      "verification": "Extracted these two files from the base commit into a temporary directory, applied the patch there, and verified that both SHA-256 hashes match afterFix.sourceSha256.",
+      "recipe": [
+        "Extract each listed file from baseCommit into an empty temporary directory, preserving repository-relative paths.",
+        "From that temporary directory, run git apply with the absolute path to the patch; do not apply it to the current working tree.",
+        "Compare the reconstructed files' SHA-256 hashes with their entries in afterFix.sourceSha256."
+      ]
+    },
+    "coverageLimit": "The patch reconstructs only the two listed files. Other experiment files remain identified by the original sourceSha256 entries and are not included in this patch."
+  },
+  "consumer": "Codex in-app browser in the current task",
+  "browserPluginVersion": "26.820.60940",
+  "nativeCallInterface": "tab.capabilities.get(\"webmcp\").fetchTools(), followed by tools.call(name, input)",
+  "scope": {
+    "realRepositoryScannerCompilerBridgeAndDomExecutor": true,
+    "browserProvidedModelContext": true,
+    "mockedModelContext": false,
+    "executionWorlds": "Both runtime halves run in the page MAIN world",
+    "installedMv3Extension": false,
+    "chromeNativeAgentConnectionProven": false,
+    "separateChosenChatGptSessionTested": false,
+    "humanUiActionsPerformedByBrowserAutomation": true,
+    "canonicalStudioConfigTested": false
+  },
+  "environment": {
+    "origin": "http://127.0.0.1:4175",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "apiMethods": ["registerTool", "getTools"]
+  },
+  "beforeFix": {
+    "sourceSha256": {
+      "extension/main-world/runtime.ts": "d5d6815791157259537b8e5e102c16b3e374c7936c130f56f2be3c356881fb2c",
+      "extension/content/content-script.ts": "909bc2e8837368f783fe3f0cddd8c63be622a1d918fc717aa5b5f7cedd973e10",
+      "spikes/native-runtime/index.html": "96a942af0eba90c6bb7dc07f799bab8617fa1348fafcc4d23b1cd9492d456b58",
+      "spikes/native-runtime/runtime.ts": "7e2c410165e6418b66edf9cedfc993053e1484cbf192afe06fd12b80fe3966ba",
+      "spikes/native-runtime/serve.mjs": "df84652e207a64cd1ab4ca07ba57cc68ff20e99684f2b825507c0b500a2bbdbe",
+      "tsconfig.json": "3dddec2951f55a2ca5ff7abdaf3ae72205ea46d45b537260300dd4d31cc356e3"
+    },
+    "nativeCallAttempts": 3,
+    "events": [
+      {
+        "step": "native_search",
+        "input": {
+          "q": "native feasibility keyboard",
+          "category": "keyboards"
+        },
+        "result": {
+          "matchedTarget": "<form#product-search>",
+          "navigationOccurred": false,
+          "result": {
+            "fields": ["q", "category"],
+            "submitted": true
+          },
+          "stateChanged": true,
+          "status": "completed",
+          "success": true,
+          "urlAfter": "http://127.0.0.1:4175/",
+          "urlBefore": "http://127.0.0.1:4175/",
+          "warnings": []
+        },
+        "visibleAfter": {
+          "status": "Results for native feasibility keyboard (keyboards).",
+          "submissions": "1"
+        }
+      },
+      {
+        "step": "invalid_category",
+        "input": {
+          "q": "should not submit",
+          "category": "not-a-category"
+        },
+        "result": {
+          "error": {
+            "code": "invalid_arguments",
+            "message": "$input.category must be one of the declared enum values."
+          },
+          "navigationOccurred": false,
+          "stateChanged": false,
+          "status": "invalid_arguments",
+          "success": false,
+          "urlAfter": "http://127.0.0.1:4175/",
+          "urlBefore": "http://127.0.0.1:4175/",
+          "warnings": []
+        },
+        "visibleAfter": {
+          "category": "keyboards",
+          "query": "native feasibility keyboard",
+          "status": "Results for native feasibility keyboard (keyboards).",
+          "submissions": "1"
+        }
+      },
+      {
+        "step": "ui_disable_runtime",
+        "result": {
+          "diagnostics": {
+            "apiMockedByFixture": false,
+            "discoveredCapabilities": [
+              {
+                "effect": "read",
+                "executor": {
+                  "expected": {
+                    "event": "submit",
+                    "waitMs": 1200
+                  },
+                  "fields": {
+                    "category": {
+                      "accessibleName": "Filter by category",
+                      "fallbacks": [
+                        {
+                          "accessibleName": "Filter by category",
+                          "description": "role combobox with accessible name Filter by category",
+                          "kind": "role",
+                          "role": "combobox"
+                        },
+                        {
+                          "description": "associated label Filter by category",
+                          "kind": "label",
+                          "labelText": "Filter by category",
+                          "relation": "labelled-control"
+                        },
+                        {
+                          "description": "id=category",
+                          "kind": "stable-attribute",
+                          "stableAttribute": "[MaxDepth]"
+                        },
+                        {
+                          "description": "name=category",
+                          "kind": "stable-attribute",
+                          "stableAttribute": "[MaxDepth]"
+                        },
+                        {
+                          "description": "resolve by form-control",
+                          "kind": "relationship",
+                          "relation": "form-control"
+                        },
+                        {
+                          "description": "CSS fallback #category",
+                          "kind": "css",
+                          "selector": "#category"
+                        },
+                        {
+                          "description": "CSS fallback [name=\"category\"]",
+                          "kind": "css",
+                          "selector": "[name=\"category\"]"
+                        },
+                        {
+                          "description": "CSS fallback select",
+                          "kind": "css",
+                          "selector": "select"
+                        }
+                      ],
+                      "framePath": [],
+                      "labelText": "Filter by category",
+                      "relationship": "form-control",
+                      "role": "combobox",
+                      "shadowPath": [],
+                      "stableAttributes": [
+                        {
+                          "name": "id",
+                          "value": "category"
+                        },
+                        {
+                          "name": "name",
+                          "value": "category"
+                        }
+                      ]
+                    },
+                    "q": {
+                      "accessibleName": "Search products",
+                      "fallbacks": [
+                        {
+                          "accessibleName": "Search products",
+                          "description": "role searchbox with accessible name Search products",
+                          "kind": "role",
+                          "role": "searchbox"
+                        },
+                        {
+                          "description": "associated label Search products",
+                          "kind": "label",
+                          "labelText": "Search products",
+                          "relation": "labelled-control"
+                        },
+                        {
+                          "description": "id=query",
+                          "kind": "stable-attribute",
+                          "stableAttribute": "[MaxDepth]"
+                        },
+                        {
+                          "description": "name=q",
+                          "kind": "stable-attribute",
+                          "stableAttribute": "[MaxDepth]"
+                        },
+                        {
+                          "description": "resolve by form-control",
+                          "kind": "relationship",
+                          "relation": "form-control"
+                        },
+                        {
+                          "description": "CSS fallback #query",
+                          "kind": "css",
+                          "selector": "#query"
+                        },
+                        {
+                          "description": "CSS fallback [name=\"q\"]",
+                          "kind": "css",
+                          "selector": "[name=\"q\"]"
+                        },
+                        {
+                          "description": "CSS fallback input",
+                          "kind": "css",
+                          "selector": "input"
+                        }
+                      ],
+                      "framePath": [],
+                      "labelText": "Search products",
+                      "relationship": "form-control",
+                      "role": "searchbox",
+                      "shadowPath": [],
+                      "stableAttributes": [
+                        {
+                          "name": "id",
+                          "value": "query"
+                        },
+                        {
+                          "name": "name",
+                          "value": "q"
+                        }
+                      ]
+                    }
+                  },
+                  "form": {
+                    "accessibleName": "Product search",
+                    "fallbacks": [
+                      {
+                        "accessibleName": "Product search",
+                        "description": "role form with accessible name Product search",
+                        "kind": "role",
+                        "role": "form"
+                      },
+                      {
+                        "description": "id=product-search",
+                        "kind": "stable-attribute",
+                        "stableAttribute": {
+                          "name": "id",
+                          "value": "product-search"
+                        }
+                      },
+                      {
+                        "description": "CSS fallback #product-search",
+                        "kind": "css",
+                        "selector": "#product-search"
+                      },
+                      {
+                        "description": "CSS fallback form",
+                        "kind": "css",
+                        "selector": "form"
+                      }
+                    ],
+                    "framePath": [],
+                    "role": "form",
+                    "shadowPath": [],
+                    "stableAttributes": [
+                      {
+                        "name": "id",
+                        "value": "product-search"
+                      }
+                    ]
+                  },
+                  "kind": "form",
+                  "submit": {
+                    "accessibleName": "Search products",
+                    "fallbacks": [
+                      {
+                        "accessibleName": "Search products",
+                        "description": "role button with accessible name Search products",
+                        "kind": "role",
+                        "role": "button"
+                      },
+                      {
+                        "description": "resolve by form-submit",
+                        "kind": "relationship",
+                        "relation": "form-submit"
+                      },
+                      {
+                        "description": "CSS fallback button",
+                        "kind": "css",
+                        "selector": "button"
+                      }
+                    ],
+                    "framePath": [],
+                    "relationship": "form-submit",
+                    "role": "button",
+                    "shadowPath": [],
+                    "stableAttributes": []
+                  }
+                },
+                "id": "inferred:search_products:form:ef869a6b",
+                "name": "search_products"
+              }
+            ],
+            "enabled": false,
+            "executionWorlds": "Both runtime halves in the page's MAIN world",
+            "extensionInstalledByFixture": false,
+            "fixtureOnly": true,
+            "lastExecution": {
+              "capabilityId": "inferred:search_products:form:ef869a6b",
+              "result": {
+                "error": {
+                  "code": "invalid_arguments",
+                  "message": "$input.category must be one of the declared enum values."
+                },
+                "navigationOccurred": false,
+                "stateChanged": false,
+                "status": "invalid_arguments",
+                "success": false,
+                "urlAfter": "http://127.0.0.1:4175/",
+                "urlBefore": "http://127.0.0.1:4175/",
+                "warnings": []
+              }
+            },
+            "origin": "http://127.0.0.1:4175",
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "webmcp": {
+              "apiMethods": ["registerTool", "getTools"],
+              "available": true,
+              "nativeTools": [],
+              "registered": ["search_products"],
+              "rejected": [
+                {
+                  "message": "The host exposes no safe method for unregistering this inferred tool.",
+                  "name": "search_products"
+                }
+              ]
+            }
+          },
+          "status": "Runtime disabled; inspect native tool availability separately.",
+          "submissions": "1"
+        }
+      },
+      {
+        "step": "native_call_while_disabled_before_fix",
+        "input": {
+          "q": "disabled call must not submit",
+          "category": "audio"
+        },
+        "result": {
+          "error": {
+            "code": "permission_blocked",
+            "message": "Inferred capability registration is disabled in the inspector."
+          },
+          "navigationOccurred": false,
+          "stateChanged": false,
+          "status": "permission_blocked",
+          "success": false,
+          "urlAfter": "http://127.0.0.1:4175/",
+          "urlBefore": "http://127.0.0.1:4175/",
+          "warnings": []
+        },
+        "visibleAfter": {
+          "category": "keyboards",
+          "query": "native feasibility keyboard",
+          "status": "Results for native feasibility keyboard (keyboards).",
+          "submissions": "1"
+        }
+      }
+    ]
+  },
+  "afterFix": {
+    "sourceSha256": {
+      "extension/main-world/runtime.ts": "5798be2bb3d0742ce9f9b2090fc52bf6263311e0935763e12ee02a4c64900ff0",
+      "extension/content/content-script.ts": "909bc2e8837368f783fe3f0cddd8c63be622a1d918fc717aa5b5f7cedd973e10",
+      "spikes/native-runtime/index.html": "96a942af0eba90c6bb7dc07f799bab8617fa1348fafcc4d23b1cd9492d456b58",
+      "spikes/native-runtime/runtime.ts": "7e2c410165e6418b66edf9cedfc993053e1484cbf192afe06fd12b80fe3966ba",
+      "spikes/native-runtime/serve.mjs": "df84652e207a64cd1ab4ca07ba57cc68ff20e99684f2b825507c0b500a2bbdbe",
+      "tsconfig.json": "3dddec2951f55a2ca5ff7abdaf3ae72205ea46d45b537260300dd4d31cc356e3",
+      "spikes/native-webmcp/style.css": "e5a5fb20716d0c434dfa84e38e2717c36df037bae53e0abe57156ad2ac74517a",
+      "tests/unit/main-world.test.ts": "201c93949ace1f0dc95b632338abd84e3ac0612e4efd397ce5e3c809300a03ce",
+      "package.json": "a9a2e8ece9cac6796d4f0a80d0ac9d094d8bb8394b6c6c7c654854dd42537b39"
+    },
+    "nativeCallAttempts": 5,
+    "nativeExecutionResponses": 3,
+    "staleCallsRejectedBeforeExecution": 2,
+    "events": [
+      {
+        "step": "fixed_runtime_initial",
+        "result": {
+          "diagnostics": {
+            "apiMockedByFixture": false,
+            "discoveredCapabilities": [
+              {
+                "effect": "read",
+                "executor": {
+                  "expected": {
+                    "event": "submit",
+                    "waitMs": 1200
+                  },
+                  "fields": {
+                    "category": {
+                      "accessibleName": "Filter by category",
+                      "fallbacks": [
+                        {
+                          "accessibleName": "Filter by category",
+                          "description": "role combobox with accessible name Filter by category",
+                          "kind": "role",
+                          "role": "combobox"
+                        },
+                        {
+                          "description": "associated label Filter by category",
+                          "kind": "label",
+                          "labelText": "Filter by category",
+                          "relation": "labelled-control"
+                        },
+                        {
+                          "description": "id=category",
+                          "kind": "stable-attribute",
+                          "stableAttribute": "[MaxDepth]"
+                        },
+                        {
+                          "description": "name=category",
+                          "kind": "stable-attribute",
+                          "stableAttribute": "[MaxDepth]"
+                        },
+                        {
+                          "description": "resolve by form-control",
+                          "kind": "relationship",
+                          "relation": "form-control"
+                        },
+                        {
+                          "description": "CSS fallback #category",
+                          "kind": "css",
+                          "selector": "#category"
+                        },
+                        {
+                          "description": "CSS fallback [name=\"category\"]",
+                          "kind": "css",
+                          "selector": "[name=\"category\"]"
+                        },
+                        {
+                          "description": "CSS fallback select",
+                          "kind": "css",
+                          "selector": "select"
+                        }
+                      ],
+                      "framePath": [],
+                      "labelText": "Filter by category",
+                      "relationship": "form-control",
+                      "role": "combobox",
+                      "shadowPath": [],
+                      "stableAttributes": [
+                        {
+                          "name": "id",
+                          "value": "category"
+                        },
+                        {
+                          "name": "name",
+                          "value": "category"
+                        }
+                      ]
+                    },
+                    "q": {
+                      "accessibleName": "Search products",
+                      "fallbacks": [
+                        {
+                          "accessibleName": "Search products",
+                          "description": "role searchbox with accessible name Search products",
+                          "kind": "role",
+                          "role": "searchbox"
+                        },
+                        {
+                          "description": "associated label Search products",
+                          "kind": "label",
+                          "labelText": "Search products",
+                          "relation": "labelled-control"
+                        },
+                        {
+                          "description": "id=query",
+                          "kind": "stable-attribute",
+                          "stableAttribute": "[MaxDepth]"
+                        },
+                        {
+                          "description": "name=q",
+                          "kind": "stable-attribute",
+                          "stableAttribute": "[MaxDepth]"
+                        },
+                        {
+                          "description": "resolve by form-control",
+                          "kind": "relationship",
+                          "relation": "form-control"
+                        },
+                        {
+                          "description": "CSS fallback #query",
+                          "kind": "css",
+                          "selector": "#query"
+                        },
+                        {
+                          "description": "CSS fallback [name=\"q\"]",
+                          "kind": "css",
+                          "selector": "[name=\"q\"]"
+                        },
+                        {
+                          "description": "CSS fallback input",
+                          "kind": "css",
+                          "selector": "input"
+                        }
+                      ],
+                      "framePath": [],
+                      "labelText": "Search products",
+                      "relationship": "form-control",
+                      "role": "searchbox",
+                      "shadowPath": [],
+                      "stableAttributes": [
+                        {
+                          "name": "id",
+                          "value": "query"
+                        },
+                        {
+                          "name": "name",
+                          "value": "q"
+                        }
+                      ]
+                    }
+                  },
+                  "form": {
+                    "accessibleName": "Product search",
+                    "fallbacks": [
+                      {
+                        "accessibleName": "Product search",
+                        "description": "role form with accessible name Product search",
+                        "kind": "role",
+                        "role": "form"
+                      },
+                      {
+                        "description": "id=product-search",
+                        "kind": "stable-attribute",
+                        "stableAttribute": {
+                          "name": "id",
+                          "value": "product-search"
+                        }
+                      },
+                      {
+                        "description": "CSS fallback #product-search",
+                        "kind": "css",
+                        "selector": "#product-search"
+                      },
+                      {
+                        "description": "CSS fallback form",
+                        "kind": "css",
+                        "selector": "form"
+                      }
+                    ],
+                    "framePath": [],
+                    "role": "form",
+                    "shadowPath": [],
+                    "stableAttributes": [
+                      {
+                        "name": "id",
+                        "value": "product-search"
+                      }
+                    ]
+                  },
+                  "kind": "form",
+                  "submit": {
+                    "accessibleName": "Search products",
+                    "fallbacks": [
+                      {
+                        "accessibleName": "Search products",
+                        "description": "role button with accessible name Search products",
+                        "kind": "role",
+                        "role": "button"
+                      },
+                      {
+                        "description": "resolve by form-submit",
+                        "kind": "relationship",
+                        "relation": "form-submit"
+                      },
+                      {
+                        "description": "CSS fallback button",
+                        "kind": "css",
+                        "selector": "button"
+                      }
+                    ],
+                    "framePath": [],
+                    "relationship": "form-submit",
+                    "role": "button",
+                    "shadowPath": [],
+                    "stableAttributes": []
+                  }
+                },
+                "id": "inferred:search_products:form:ef869a6b",
+                "name": "search_products"
+              }
+            ],
+            "enabled": true,
+            "executionWorlds": "Both runtime halves in the page's MAIN world",
+            "extensionInstalledByFixture": false,
+            "fixtureOnly": true,
+            "lastExecution": null,
+            "origin": "http://127.0.0.1:4175",
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "webmcp": {
+              "apiMethods": ["registerTool", "getTools"],
+              "available": true,
+              "nativeTools": [],
+              "registered": ["search_products"],
+              "rejected": []
+            }
+          },
+          "status": "Real discovery and registration completed; no mock used.",
+          "submissions": "0"
+        }
+      },
+      {
+        "step": "native_search_after_fix",
+        "input": {
+          "q": "native lifecycle proof",
+          "category": "keyboards"
+        },
+        "result": {
+          "matchedTarget": "<form#product-search>",
+          "navigationOccurred": false,
+          "result": {
+            "fields": ["q", "category"],
+            "submitted": true
+          },
+          "stateChanged": true,
+          "status": "completed",
+          "success": true,
+          "urlAfter": "http://127.0.0.1:4175/",
+          "urlBefore": "http://127.0.0.1:4175/",
+          "warnings": []
+        },
+        "visibleAfter": {
+          "category": "keyboards",
+          "query": "native lifecycle proof",
+          "status": "Results for native lifecycle proof (keyboards).",
+          "submissions": "1"
+        }
+      },
+      {
+        "step": "invalid_category_after_fix",
+        "input": {
+          "q": "must not mutate fields",
+          "category": "invalid"
+        },
+        "result": {
+          "error": {
+            "code": "invalid_arguments",
+            "message": "$input.category must be one of the declared enum values."
+          },
+          "navigationOccurred": false,
+          "stateChanged": false,
+          "status": "invalid_arguments",
+          "success": false,
+          "urlAfter": "http://127.0.0.1:4175/",
+          "urlBefore": "http://127.0.0.1:4175/",
+          "warnings": []
+        },
+        "visibleAfter": {
+          "category": "keyboards",
+          "query": "native lifecycle proof",
+          "status": "Results for native lifecycle proof (keyboards).",
+          "submissions": "1"
+        }
+      },
+      {
+        "step": "ui_disable_runtime_after_fix",
+        "result": {
+          "status": "Runtime disabled; inspect native tool availability separately.",
+          "submissions": "1",
+          "webmcp": {
+            "apiMethods": ["registerTool", "getTools"],
+            "available": true,
+            "nativeTools": [],
+            "registered": [],
+            "rejected": []
+          }
+        }
+      },
+      {
+        "step": "native_inventory_after_disable",
+        "result": "No WebMCP tools are available in this document."
+      },
+      {
+        "step": "stale_native_call_after_disable",
+        "input": {
+          "q": "must stay blocked",
+          "category": "audio"
+        },
+        "result": {
+          "rejected": true,
+          "message": "WebMCP tool registration is stale. Call fetchTools() again."
+        },
+        "visibleAfter": {
+          "category": "keyboards",
+          "query": "native lifecycle proof",
+          "status": "Results for native lifecycle proof (keyboards).",
+          "submissions": "1"
+        }
+      },
+      {
+        "step": "ui_reenable_runtime",
+        "result": {
+          "status": "Runtime enabled; inspect native tool availability separately.",
+          "submissions": "1",
+          "webmcp": {
+            "apiMethods": ["registerTool", "getTools"],
+            "available": true,
+            "nativeTools": [],
+            "registered": ["search_products"],
+            "rejected": []
+          }
+        }
+      },
+      {
+        "step": "stale_handle_attempt_after_reenable",
+        "input": {
+          "q": "native re-enabled audio",
+          "category": "audio"
+        },
+        "result": {
+          "rejected": true,
+          "message": "WebMCP tool registration is stale. Call fetchTools() again."
+        },
+        "visibleAfter": {
+          "category": "keyboards",
+          "query": "native lifecycle proof",
+          "status": "Results for native lifecycle proof (keyboards).",
+          "submissions": "1"
+        },
+        "note": "The preceding native attempt through the REPL helper failed before execution; a newly fetched handle is used directly below."
+      },
+      {
+        "step": "native_search_after_reenable",
+        "input": {
+          "q": "native re-enabled audio",
+          "category": "audio"
+        },
+        "result": {
+          "matchedTarget": "<form#product-search>",
+          "navigationOccurred": false,
+          "result": {
+            "fields": ["q", "category"],
+            "submitted": true
+          },
+          "stateChanged": true,
+          "status": "completed",
+          "success": true,
+          "urlAfter": "http://127.0.0.1:4175/",
+          "urlBefore": "http://127.0.0.1:4175/",
+          "warnings": []
+        },
+        "visibleAfter": {
+          "category": "audio",
+          "query": "native re-enabled audio",
+          "status": "Results for native re-enabled audio (audio).",
+          "submissions": "2"
+        }
+      },
+      {
+        "step": "ui_refresh_diagnostics",
+        "result": {
+          "apiMockedByFixture": false,
+          "discoveredCapabilities": [
+            {
+              "effect": "read",
+              "executor": {
+                "expected": {
+                  "event": "submit",
+                  "waitMs": 1200
+                },
+                "fields": {
+                  "category": {
+                    "accessibleName": "Filter by category",
+                    "fallbacks": [
+                      {
+                        "accessibleName": "Filter by category",
+                        "description": "role combobox with accessible name Filter by category",
+                        "kind": "role",
+                        "role": "combobox"
+                      },
+                      {
+                        "description": "associated label Filter by category",
+                        "kind": "label",
+                        "labelText": "Filter by category",
+                        "relation": "labelled-control"
+                      },
+                      {
+                        "description": "id=category",
+                        "kind": "stable-attribute",
+                        "stableAttribute": {
+                          "name": "id",
+                          "value": "category"
+                        }
+                      },
+                      {
+                        "description": "name=category",
+                        "kind": "stable-attribute",
+                        "stableAttribute": {
+                          "name": "name",
+                          "value": "category"
+                        }
+                      },
+                      {
+                        "description": "resolve by form-control",
+                        "kind": "relationship",
+                        "relation": "form-control"
+                      },
+                      {
+                        "description": "CSS fallback #category",
+                        "kind": "css",
+                        "selector": "#category"
+                      },
+                      {
+                        "description": "CSS fallback [name=\"category\"]",
+                        "kind": "css",
+                        "selector": "[name=\"category\"]"
+                      },
+                      {
+                        "description": "CSS fallback select",
+                        "kind": "css",
+                        "selector": "select"
+                      }
+                    ],
+                    "framePath": [],
+                    "labelText": "Filter by category",
+                    "relationship": "form-control",
+                    "role": "combobox",
+                    "shadowPath": [],
+                    "stableAttributes": [
+                      {
+                        "name": "id",
+                        "value": "category"
+                      },
+                      {
+                        "name": "name",
+                        "value": "category"
+                      }
+                    ]
+                  },
+                  "q": {
+                    "accessibleName": "Search products",
+                    "fallbacks": [
+                      {
+                        "accessibleName": "Search products",
+                        "description": "role searchbox with accessible name Search products",
+                        "kind": "role",
+                        "role": "searchbox"
+                      },
+                      {
+                        "description": "associated label Search products",
+                        "kind": "label",
+                        "labelText": "Search products",
+                        "relation": "labelled-control"
+                      },
+                      {
+                        "description": "id=query",
+                        "kind": "stable-attribute",
+                        "stableAttribute": {
+                          "name": "id",
+                          "value": "query"
+                        }
+                      },
+                      {
+                        "description": "name=q",
+                        "kind": "stable-attribute",
+                        "stableAttribute": {
+                          "name": "name",
+                          "value": "q"
+                        }
+                      },
+                      {
+                        "description": "resolve by form-control",
+                        "kind": "relationship",
+                        "relation": "form-control"
+                      },
+                      {
+                        "description": "CSS fallback #query",
+                        "kind": "css",
+                        "selector": "#query"
+                      },
+                      {
+                        "description": "CSS fallback [name=\"q\"]",
+                        "kind": "css",
+                        "selector": "[name=\"q\"]"
+                      },
+                      {
+                        "description": "CSS fallback input",
+                        "kind": "css",
+                        "selector": "input"
+                      }
+                    ],
+                    "framePath": [],
+                    "labelText": "Search products",
+                    "relationship": "form-control",
+                    "role": "searchbox",
+                    "shadowPath": [],
+                    "stableAttributes": [
+                      {
+                        "name": "id",
+                        "value": "query"
+                      },
+                      {
+                        "name": "name",
+                        "value": "q"
+                      }
+                    ]
+                  }
+                },
+                "form": {
+                  "accessibleName": "Product search",
+                  "fallbacks": [
+                    {
+                      "accessibleName": "Product search",
+                      "description": "role form with accessible name Product search",
+                      "kind": "role",
+                      "role": "form"
+                    },
+                    {
+                      "description": "id=product-search",
+                      "kind": "stable-attribute",
+                      "stableAttribute": {
+                        "name": "id",
+                        "value": "product-search"
+                      }
+                    },
+                    {
+                      "description": "CSS fallback #product-search",
+                      "kind": "css",
+                      "selector": "#product-search"
+                    },
+                    {
+                      "description": "CSS fallback form",
+                      "kind": "css",
+                      "selector": "form"
+                    }
+                  ],
+                  "framePath": [],
+                  "role": "form",
+                  "shadowPath": [],
+                  "stableAttributes": [
+                    {
+                      "name": "id",
+                      "value": "product-search"
+                    }
+                  ]
+                },
+                "kind": "form",
+                "submit": {
+                  "accessibleName": "Search products",
+                  "fallbacks": [
+                    {
+                      "accessibleName": "Search products",
+                      "description": "role button with accessible name Search products",
+                      "kind": "role",
+                      "role": "button"
+                    },
+                    {
+                      "description": "resolve by form-submit",
+                      "kind": "relationship",
+                      "relation": "form-submit"
+                    },
+                    {
+                      "description": "CSS fallback button",
+                      "kind": "css",
+                      "selector": "button"
+                    }
+                  ],
+                  "framePath": [],
+                  "relationship": "form-submit",
+                  "role": "button",
+                  "shadowPath": [],
+                  "stableAttributes": []
+                }
+              },
+              "id": "inferred:search_products:form:ef869a6b",
+              "name": "search_products"
+            }
+          ],
+          "enabled": true,
+          "executionWorlds": "Both runtime halves in the page's MAIN world",
+          "extensionInstalledByFixture": false,
+          "fixtureOnly": true,
+          "lastExecution": {
+            "capabilityId": "inferred:search_products:form:ef869a6b",
+            "result": {
+              "matchedTarget": "<form#product-search>",
+              "navigationOccurred": false,
+              "result": {
+                "fields": ["q", "category"],
+                "submitted": true
+              },
+              "stateChanged": true,
+              "status": "completed",
+              "success": true,
+              "urlAfter": "http://127.0.0.1:4175/",
+              "urlBefore": "http://127.0.0.1:4175/",
+              "warnings": []
+            }
+          },
+          "origin": "http://127.0.0.1:4175",
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+          "webmcp": {
+            "apiMethods": ["registerTool", "getTools"],
+            "available": true,
+            "nativeTools": [],
+            "registered": ["search_products"],
+            "rejected": []
+          }
+        }
+      }
+    ]
+  },
+  "verification": {
+    "build": "npm run build passed",
+    "unitTests": {
+      "command": "npm test",
+      "files": 13,
+      "passed": 77
+    },
+    "playwrightMockTestsUsedAsNativeEvidence": false
+  },
+  "limitations": [
+    "This is an integration test of the existing extension runtime components, not an installed extension or proof of MAIN-to-ISOLATED-world transport.",
+    "It does not establish the chosen ChatGPT setup, exact selected-tab pairing, canonical config transfer, authorization of logged-in sessions, or Reddit compatibility.",
+    "The local Chrome connector still reports Capability is not available: webmcp.",
+    "Registration removal and stale-call rejection were tested; cancellation of in-flight DOM work was not.",
+    "An additional attempt through a REPL helper after re-enabling returned a stale-registration error; fetching a fresh handle and calling it directly succeeded."
+  ]
+}

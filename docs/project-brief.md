@@ -8,6 +8,8 @@
 
 **Evidence status:** The repository contains an extension prototype. This brief does not certify completion of the MVP or any native ChatGPT/browser compatibility gate.
 
+**Latest runtime evidence:** The [August 28 feasibility experiment](feasibility/2026-08-28.md) demonstrated native shared authoring, the existing execution runtime, and registration removal in Codex. The chosen ChatGPT setup and complete G1–G3 path remain open.
+
 This is the repository planning reference for the agreed hackathon MVP. Supporting technical evidence is retained in the [Printing Press and discovery research](research/printing-press-discovery.md). The personal conversation transcript and device-handoff files are not part of the repository.
 
 **Relationship to the prototype:** The existing [extension design](superpowers/specs/2026-08-28-webmcp-polyfill-design.md) describes a narrower DOM-inference runtime and inspector. It is an implementation starting point, not the full Studio product. Map its Capability Graph, adapter hooks, and browser API handling to the canonical config, declarative node palette, and G1–G3 below. Mocked WebMCP tests or inspector invocation alone do not establish native ChatGPT compatibility. No code changes or runtime tests were performed as part of importing this brief.
@@ -16,7 +18,7 @@ This is the repository planning reference for the agreed hackathon MVP. Supporti
 
 ### How to read this brief
 
-- **Approved scope** records user decisions. Transcript message numbers identify their provenance.
+- **Approved scope** records user decisions. The personal transcript is retained separately from this repository.
 - **Recommended implementation** gives the builders a coherent starting design. Exact field names, libraries, limits, and UI details are not presented as previously approved commitments.
 - **Verification gates** name evidence still required. A proposed design, valid config, or successful source lookup does not close a runtime gate.
 

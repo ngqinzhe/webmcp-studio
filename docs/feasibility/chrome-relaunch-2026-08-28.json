@@ -1,0 +1,52 @@
+{
+  "recordedAt": "2026-08-28T13:58:29.604Z",
+  "consumer": "Codex Browser plugin connected to Google Chrome through the ChatGPT browser extension",
+  "userReportedRelaunch": true,
+  "installedChromeVersion": "152.0.7977.64",
+  "previousInstalledChromeVersion": "151.0.7922.170",
+  "fixtureUrl": "http://127.0.0.1:4174/",
+  "environment": {
+    "origin": "http://127.0.0.1:4174",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+    "secureContext": true,
+    "topLevel": true,
+    "modelContextPresent": true,
+    "registerTool": "function",
+    "unregisterTool": "undefined",
+    "apiMockedByFixture": false,
+    "extensionBridgeImplemented": false
+  },
+  "visibleStatus": [
+    "Registered 3 tools with the browser-provided API. Registration alone is not invocation proof.",
+    "0",
+    "No changes yet."
+  ],
+  "advertisedTabCapabilities": [
+    {
+      "description": "List assets already observed in the current page state and bundle selected assets into a temporary local artifact.",
+      "id": "pageAssets"
+    }
+  ],
+  "nativeCapabilityProbe": {
+    "available": false,
+    "message": "Capability is not available: webmcp"
+  },
+  "nativeAgentCallsInChrome": 0,
+  "extensionLoadedByThisTask": false,
+  "browserSettingsInspectedByAutomation": false,
+  "sourceSha256": {
+    "spikes/native-webmcp/index.html": "417cfc79154c7e176ddf58c453eca73f3c18ef0519dda7ef18e3aee33b8156c7",
+    "spikes/native-webmcp/serve.mjs": "437ed27a316b011aed800dfc06c18e331a67875837f1c668587a3dcc61763319",
+    "spikes/native-webmcp/studio.mjs": "18933239c412cc92237e0f34b13bcf7bb3885bb349bf488655dee01e5ebaf1ca",
+    "spikes/native-webmcp/style.css": "e5a5fb20716d0c434dfa84e38e2717c36df037bae53e0abe57156ad2ac74517a",
+    "spikes/native-webmcp/target.html": "d6db7f11a18606749e1310d2a4e3ce7dc5c3d8c4b96a9b64f659b05018495791",
+    "spikes/native-webmcp/target.mjs": "554c1cc59f08c2adca088cbf416fd95c82d27f7c149661dd4aaa81e9ce74fd17",
+    "package.json": "a9a2e8ece9cac6796d4f0a80d0ac9d094d8bb8394b6c6c7c654854dd42537b39"
+  },
+  "conclusion": "The fixture reports three successful registrations through Chrome's browser-provided API. The current agent connection rejects the WebMCP capability, so native agent discovery/invocation cannot be tested through this connection. This proves neither G1 in a separate ChatGPT session nor G2/G3, and is not a universal impossibility claim.",
+  "limitations": [
+    "The native registration count is reported by the fixture after its registerTool calls complete; agent-native inventory retrieval is unavailable.",
+    "Chrome also updated between observations, so the API change cannot be attributed solely to the flag.",
+    "No direct JavaScript invocation, inspector call, substitute agent, or additional relay was used to simulate native agent consumption."
+  ]
+}

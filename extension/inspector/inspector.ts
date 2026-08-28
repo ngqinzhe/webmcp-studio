@@ -512,6 +512,7 @@ function isStateUpdate(
   return (
     isRecord(value) &&
     value.type === "polyfill:state-update" &&
+    (value.tabId === undefined || isNonNegativeInteger(value.tabId)) &&
     isInspectorState(value.state)
   );
 }
@@ -1016,8 +1017,10 @@ refs.graphToggle.addEventListener("click", () => {
   graphVisible = !graphVisible;
   renderGraphJson();
 });
-chrome.runtime.onMessage.addListener((message: unknown) => {
+chrome.runtime.onMessage.addListener((message: unknown, sender) => {
   if (!isStateUpdate(message)) return;
+  const sourceTabId = sender.tab?.id ?? message.tabId;
+  if (tabId === undefined || sourceTabId !== tabId) return;
   state = message.state;
   transportError = null;
   render();

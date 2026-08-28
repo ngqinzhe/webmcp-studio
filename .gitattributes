@@ -1,0 +1,2 @@
+# Evidence patches retain exact bytes and intentional diff context spaces.
+docs/feasibility/*.patch -text -whitespace

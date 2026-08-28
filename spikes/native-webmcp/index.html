@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Native WebMCP feasibility · Studio</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/studio.mjs"></script>
+  </head>
+  <body>
+    <main>
+      <h1>Native WebMCP feasibility</h1>
+      <p>
+        A small shared-draft experiment, not the complete Studio. No model
+        credentials, inference, discovery, activation, or modelContext mock.
+      </p>
+      <p id="native-status" role="status">Checking the browser API…</p>
+      <section aria-labelledby="draft-heading">
+        <h2 id="draft-heading">Shared draft</h2>
+        <p>Revision: <output id="revision">0</output></p>
+        <form id="rename-form">
+          <label for="tool-name">Draft tool name</label>
+          <input id="tool-name" name="name" required maxlength="64" />
+          <button type="submit">Rename draft tool</button>
+        </form>
+        <button id="add-wait" type="button">Add wait step</button>
+        <button id="undo" type="button">Undo last edit</button>
+        <button id="revoke" type="button">Revoke agent draft edits</button>
+        <p id="edit-status" role="status">No changes yet.</p>
+        <ol id="flow" aria-label="Draft flow"></ol>
+        <pre id="project" aria-label="Current draft JSON"></pre>
+      </section>
+      <section aria-labelledby="evidence-heading">
+        <h2 id="evidence-heading">Local evidence</h2>
+        <p>
+          The log distinguishes native handler calls from UI edits. No data is
+          saved or sent to a server. Reload starts a new experiment.
+        </p>
+        <pre id="environment" aria-label="Browser environment"></pre>
+        <ol id="events" aria-label="Experiment events"></ol>
+      </section>
+      <p>
+        <a href="/target.html">Open the target fixture without native tools</a>
+      </p>
+    </main>
+  </body>
+</html>

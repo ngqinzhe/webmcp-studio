@@ -295,7 +295,7 @@ class BridgeClient {
   }
 }
 
-class ContentRuntime {
+export class ContentRuntime {
   private readonly bridge = new BridgeClient();
   private readonly adapters = new AdapterRegistry([
     ecommerceProductCardAdapter,

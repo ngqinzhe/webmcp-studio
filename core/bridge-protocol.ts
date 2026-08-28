@@ -51,7 +51,12 @@ export type ExtensionMessage =
       tabId?: number;
     }
   | { type: "polyfill:get-graph"; tabId?: number }
-  | { type: "polyfill:state-update"; state: InspectorState };
+  | {
+      type: "polyfill:state-update";
+      state: InspectorState;
+      // Added by the service worker from the content script's sender metadata.
+      tabId?: number;
+    };
 
 export type ExtensionResponse =
   | { ok: true; state: InspectorState }

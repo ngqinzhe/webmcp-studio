@@ -8,6 +8,8 @@ The [hackathon development brief](docs/project-brief.md) is the planning referen
 
 The code and setup below are the current extension prototype, described in the [extension design](docs/superpowers/specs/2026-08-28-webmcp-polyfill-design.md). The complete Studio workflow and native ChatGPT compatibility remain to be proven. Begin with gates **G1–G3** in the brief; mocked WebMCP tests or inspector invocation alone do not validate the complete browser connection.
 
+The [August 28 feasibility report](docs/feasibility/2026-08-28.md) records real native shared-authoring and execution-runtime calls in Codex, including a verified registration-removal fix. The chosen ChatGPT setup, selected local-tab bridge, and extension-injected tool consumption remain open.
+
 ## Run
 
 ```bash
@@ -32,6 +34,12 @@ npm test
 npm run test:e2e
 npm run format:check
 ```
+
+## Native feasibility fixture
+
+Run `npm run spike:native` and open `http://127.0.0.1:4174/` in a browser with native Site tools. This small shared-draft fixture never mocks `document.modelContext`. The separate `/target.html` page starts without page-provided tools. See the [reproduction steps and limitations](docs/feasibility/2026-08-28.md) before treating a result as native compatibility evidence.
+
+To test the existing scanner, compiler, message bridge, and DOM executor against native tools, run `node spikes/native-runtime/serve.mjs` and open `http://127.0.0.1:4175/`. This component fixture runs both runtime halves in one page world; it does not install or validate the MV3 extension.
 
 ## Adapters
 

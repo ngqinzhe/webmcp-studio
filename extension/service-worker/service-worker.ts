@@ -130,11 +130,12 @@ export async function openInspectorForTab(tab: chrome.tabs.Tab): Promise<void> {
   await chrome.tabs.create({ url: inspectorUrl });
 }
 
-function broadcastState(state: InspectorState): void {
+function broadcastState(tabId: number, state: InspectorState): void {
   try {
     void Promise.resolve(
       chrome.runtime.sendMessage({
         type: "polyfill:state-update",
+        tabId,
         state,
       } satisfies ExtensionMessage),
     ).catch(() => undefined);
@@ -201,7 +202,7 @@ export function registerServiceWorker(): void {
         const tabId = sender.tab?.id;
         if (validTabId(tabId)) {
           stateByTab.set(tabId, message.state);
-          broadcastState(message.state);
+          broadcastState(tabId, message.state);
         }
         sendResponse({ ok: true, started: true } satisfies ExtensionResponse);
         return false;
