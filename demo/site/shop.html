@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Shop · Demo</title>
+    <link rel="stylesheet" href="/assets/demo.css" />
+    <script src="/assets/shared.js"></script>
+  </head>
+  <body>
+    <header>
+      <a href="/">← Demos</a><strong>Product shop</strong
+      ><span style="float: right">Cart: <b id="cart-count">0</b></span>
+    </header>
+    <main>
+      <h1>Featured products</h1>
+      <p class="lede">
+        Actions are scoped to the surrounding product card, not exposed as
+        positional button clicks.
+      </p>
+      <div class="products">
+        <article class="product-card" data-product-id="keyboard" role="article">
+          <div>
+            <h2>Mechanical Keyboard</h2>
+            <p>Compact aluminum keyboard.</p>
+          </div>
+          <div class="product-actions">
+            <a href="/stale.html#keyboard">View details</a
+            ><button type="button" data-action="add-to-cart">
+              Add to cart
+            </button>
+          </div>
+        </article>
+        <article
+          class="product-card"
+          data-product-id="headphones"
+          role="article"
+        >
+          <div>
+            <h2>Studio Headphones</h2>
+            <p>Balanced monitoring sound.</p>
+          </div>
+          <div class="product-actions">
+            <a href="/stale.html#headphones">View details</a
+            ><button type="button" data-action="add-to-cart">
+              Add to cart
+            </button>
+          </div>
+        </article>
+      </div>
+      <p id="cart-status" class="status" aria-live="polite">
+        Your cart is empty.
+      </p>
+    </main>
+    <script>
+      document
+        .querySelectorAll('[data-action="add-to-cart"]')
+        .forEach(function (button) {
+          button.addEventListener("click", function () {
+            window.demoState.cart += 1;
+            document.querySelector("#cart-count").textContent = String(
+              window.demoState.cart,
+            );
+            document.querySelector("#cart-status").textContent =
+              "Added " +
+              button.closest("article").querySelector("h2").textContent +
+              " to cart.";
+            button.textContent = "Added";
+          });
+        });
+    </script>
+  </body>
+</html>

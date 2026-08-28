@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Embedded search</title>
+    <link rel="stylesheet" href="/assets/demo.css" />
+    <script src="/assets/shared.js"></script>
+  </head>
+  <body>
+    <main>
+      <form aria-label="Embedded product search">
+        <label for="frame-query"
+          >Search products<input
+            id="frame-query"
+            name="q"
+            type="search"
+            required /></label
+        ><button type="submit">Search products</button>
+      </form>
+      <p id="frame-status" class="status">Frame ready.</p>
+      <script>
+        document
+          .querySelector("form")
+          .addEventListener("submit", function (event) {
+            event.preventDefault();
+            document.querySelector("#frame-status").textContent =
+              "Frame searched for " +
+              document.querySelector("#frame-query").value +
+              ".";
+          });
+      </script>
+    </main>
+  </body>
+</html>

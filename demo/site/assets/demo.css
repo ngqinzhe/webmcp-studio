@@ -1,0 +1,145 @@
+:root {
+  color: #182033;
+  background: #f5f7fb;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+header {
+  padding: 22px max(22px, calc((100vw - 1020px) / 2));
+  background: #15233f;
+  color: white;
+}
+header a {
+  color: #b9d1ff;
+  margin-right: 15px;
+  text-decoration: none;
+}
+main {
+  max-width: 1020px;
+  margin: 0 auto;
+  padding: 34px 22px 80px;
+}
+h1 {
+  font-size: 38px;
+  margin: 0 0 10px;
+  letter-spacing: -0.04em;
+}
+h2 {
+  margin-top: 0;
+}
+.lede {
+  color: #53617b;
+  font-size: 18px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+.tile,
+.panel,
+article {
+  background: white;
+  border: 1px solid #dfe5f0;
+  border-radius: 14px;
+  padding: 18px;
+  box-shadow: 0 5px 18px #1d31500d;
+}
+.tile a {
+  color: #235dcc;
+  font-weight: 700;
+  text-decoration: none;
+}
+form {
+  display: grid;
+  gap: 12px;
+  max-width: 620px;
+}
+label {
+  display: grid;
+  gap: 5px;
+  color: #3b4962;
+  font-weight: 700;
+}
+input,
+select,
+textarea,
+button {
+  border: 1px solid #bac7dc;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font: inherit;
+}
+button {
+  color: white;
+  background: #285fc5;
+  border-color: #285fc5;
+  cursor: pointer;
+  font-weight: 700;
+}
+button.secondary {
+  color: #24416f;
+  background: #edf3ff;
+  border-color: #bad0fb;
+}
+.results,
+.products {
+  display: grid;
+  gap: 12px;
+  margin-top: 25px;
+}
+.product-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+}
+.product-card h2 {
+  margin: 0;
+}
+.product-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.status {
+  margin: 15px 0;
+  padding: 12px;
+  background: #ecfdf5;
+  border: 1px solid #9be4c5;
+  color: #145b43;
+  border-radius: 9px;
+}
+.warning {
+  background: #fff6dc;
+  border-color: #f0d082;
+  color: #6e4b00;
+}
+.muted {
+  color: #66748e;
+}
+.demo-list {
+  line-height: 1.9;
+}
+.demo-list a {
+  color: #235dcc;
+}
+iframe {
+  width: 100%;
+  min-height: 310px;
+  border: 1px solid #c6d2e6;
+  border-radius: 12px;
+  background: white;
+}
+.fake-control {
+  display: inline-block;
+  padding: 11px;
+  border: 1px dashed #b9c4d5;
+  color: #79859c;
+  cursor: default;
+}

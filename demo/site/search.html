@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Search products · Demo</title>
+    <link rel="stylesheet" href="/assets/demo.css" />
+    <script src="/assets/shared.js"></script>
+  </head>
+  <body>
+    <header><a href="/">← Demos</a><strong>Search catalog</strong></header>
+    <main>
+      <section class="panel">
+        <h1>Find products</h1>
+        <p class="lede">
+          A conventional labeled form with a select filter and visible result
+          updates.
+        </p>
+        <form id="product-search" aria-label="Product search" method="get">
+          <label for="query"
+            >Search products<input
+              id="query"
+              name="q"
+              type="search"
+              placeholder="Mechanical keyboard"
+              required /></label
+          ><label for="category"
+            >Filter by category<select id="category" name="category">
+              <option value="all">All products</option>
+              <option value="keyboards">Keyboards</option>
+              <option value="audio">Audio</option>
+            </select></label
+          ><button type="submit">Search products</button>
+        </form>
+        <p id="search-status" class="status" aria-live="polite">
+          Showing all products.
+        </p>
+        <div id="results" class="results">
+          <article>
+            <h2>Mechanical Keyboard</h2>
+            <p>Low-profile switches for quiet workspaces.</p>
+          </article>
+          <article>
+            <h2>Studio Headphones</h2>
+            <p>Closed-back monitoring headphones.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+    <script>
+      const form = document.querySelector("#product-search");
+      const status = document.querySelector("#search-status");
+      const results = document.querySelector("#results");
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        const q = new FormData(form).get("q") || "all products";
+        const category = new FormData(form).get("category");
+        window.demoState.lastSearch = String(q);
+        status.textContent =
+          "Showing results for " + q + " (" + category + ").";
+        results.dataset.query = String(q);
+      });
+    </script>
+  </body>
+</html>

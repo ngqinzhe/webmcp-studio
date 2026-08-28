@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WebMCP Studio Inspector</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true">⌁</div>
+        <div>
+          <p class="eyebrow">Developer tools</p>
+          <h1>WebMCP Studio</h1>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <span id="connection-state" class="status-chip muted">Connecting</span
+        ><button id="rescan" class="button secondary" type="button">
+          Rescan page
+        </button>
+      </div>
+    </header>
+    <main class="shell">
+      <section class="hero panel">
+        <div class="hero-copy">
+          <p class="eyebrow">Live capability graph</p>
+          <h2 id="page-title">Waiting for a page</h2>
+          <p id="page-url" class="muted-copy">
+            Activate the extension on a browser tab to inspect its visible UI.
+          </p>
+        </div>
+        <label class="toggle-row" for="enabled"
+          ><span
+            ><strong>Register inferred tools</strong
+            ><small>Keep the page's native WebMCP tools untouched.</small></span
+          ><input id="enabled" type="checkbox" checked /><span
+            class="toggle"
+            aria-hidden="true"
+          ></span
+        ></label>
+      </section>
+      <section class="metrics" aria-label="Page status">
+        <article class="metric panel">
+          <span>WebMCP</span><strong id="webmcp-state">Unknown</strong
+          ><small id="webmcp-methods">No runtime status yet</small>
+        </article>
+        <article class="metric panel">
+          <span>Native tools</span><strong id="native-count">0</strong
+          ><small>Provided by the page</small>
+        </article>
+        <article class="metric panel">
+          <span>Inferred tools</span><strong id="inferred-count">0</strong
+          ><small>Generated from semantic UI</small>
+        </article>
+        <article class="metric panel">
+          <span>Adapter tools</span><strong id="adapter-count">0</strong
+          ><small>Site-specific graph changes</small>
+        </article>
+      </section>
+      <section class="workspace">
+        <aside class="capabilities panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Capabilities</p>
+              <h2>What this page can do</h2>
+            </div>
+            <span id="blocked-count" class="count-badge">0 blocked</span>
+          </div>
+          <div id="capability-list" class="capability-list" aria-live="polite">
+            <div class="empty-state">No capabilities discovered yet.</div>
+          </div>
+        </aside>
+        <section class="details panel" aria-live="polite">
+          <div id="capability-detail" class="empty-state large">
+            Select a capability to inspect its contract.
+          </div>
+        </section>
+      </section>
+      <section class="lower-grid">
+        <section class="panel invocation-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Visible UI test</p>
+              <h2>Invoke capability</h2>
+            </div>
+          </div>
+          <p id="invoke-help" class="muted-copy">
+            Choose a capability above, then provide JSON arguments.
+          </p>
+          <label class="field-label" for="arguments">Arguments</label
+          ><textarea id="arguments" spellcheck="false" rows="7">{}</textarea>
+          <div class="button-row">
+            <button id="invoke" class="button primary" type="button" disabled>
+              Invoke selected tool</button
+            ><button
+              id="export"
+              class="button secondary"
+              type="button"
+              disabled
+            >
+              Export adapter seed
+            </button>
+          </div>
+          <div id="execution-result" class="result-box muted-copy">
+            No invocation yet.
+          </div>
+        </section>
+        <section class="panel graph-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Canonical representation</p>
+              <h2>Graph snapshot</h2>
+            </div>
+            <button id="graph-toggle" class="text-button" type="button">
+              Show JSON
+            </button>
+          </div>
+          <p class="muted-copy">
+            The graph is the boundary between detection, adapters, locators,
+            execution, and registration.
+          </p>
+          <pre id="graph-json" class="json-view hidden" tabindex="0"></pre>
+          <div id="native-tools" class="native-tools"></div>
+        </section>
+      </section>
+    </main>
+    <script src="./inspector.js"></script>
+  </body>
+</html>

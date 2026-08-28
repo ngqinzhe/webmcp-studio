@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Stale capability · Demo</title>
+    <link rel="stylesheet" href="/assets/demo.css" />
+    <script src="/assets/shared.js"></script>
+  </head>
+  <body>
+    <header><a href="/">← Demos</a><strong>Stale target</strong></header>
+    <main>
+      <h1 id="stale-title">Before navigation</h1>
+      <form id="stale-form" aria-label="Search products">
+        <label for="stale-query"
+          >Search products<input
+            id="stale-query"
+            name="q"
+            type="search" /></label
+        ><button type="submit">Search</button>
+      </form>
+      <button id="replace-page" class="secondary" type="button">
+        Navigate to new state
+      </button>
+      <p id="stale-status" class="status">The original capability is live.</p>
+      <script>
+        document
+          .querySelector("#stale-form")
+          .addEventListener("submit", function (event) {
+            event.preventDefault();
+            document.querySelector("#stale-status").textContent =
+              "Original state searched.";
+          });
+        document
+          .querySelector("#replace-page")
+          .addEventListener("click", function () {
+            history.pushState({}, "", location.pathname + "?new-state=1");
+            document.querySelector("#stale-title").textContent =
+              "After navigation";
+            document.querySelector("#stale-form").remove();
+            this.remove();
+            document.querySelector("#stale-status").textContent =
+              "The old form was removed; the graph should unregister it.";
+          });
+      </script>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Shadow DOM · Demo</title>
+    <link rel="stylesheet" href="/assets/demo.css" />
+    <script src="/assets/shared.js"></script>
+  </head>
+  <body>
+    <header><a href="/">← Demos</a><strong>Open shadow control</strong></header>
+    <main>
+      <h1>Shadow DOM form</h1>
+      <p class="lede">
+        The custom element exposes an open shadow root; closed roots are
+        intentionally not scanned.
+      </p>
+      <shadow-search data-testid="shadow-search"></shadow-search>
+      <p id="shadow-note" class="status">No shadow search submitted.</p>
+      <script>
+        class ShadowSearch extends HTMLElement {
+          constructor() {
+            super();
+            const root = this.attachShadow({ mode: "open" });
+            root.innerHTML =
+              '<form aria-label="Shadow product search"><label for="shadow-query">Search products<input id="shadow-query" name="q" type="search" required></label><button type="submit">Search</button></form>';
+            root.querySelector("form").addEventListener("submit", (event) => {
+              event.preventDefault();
+              document.querySelector("#shadow-note").textContent =
+                "Shadow search submitted for " +
+                root.querySelector("input").value +
+                ".";
+            });
+          }
+        }
+        customElements.define("shadow-search", ShadowSearch);
+      </script>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Dynamic SPA · Demo</title>
+    <link rel="stylesheet" href="/assets/demo.css" />
+    <script src="/assets/shared.js"></script>
+  </head>
+  <body>
+    <header><a href="/">← Demos</a><strong>Dynamic catalog SPA</strong></header>
+    <main>
+      <h1>Results view</h1>
+      <p class="lede">
+        Controls appear and disappear without a document reload. The graph
+        should follow them.
+      </p>
+      <button id="show-controls">Show advanced filters</button>
+      <section id="dynamic-controls" class="panel" hidden></section>
+      <p id="spa-status" class="status">Basic results loaded.</p>
+      <script>
+        const container = document.querySelector("#dynamic-controls");
+        const status = document.querySelector("#spa-status");
+        document
+          .querySelector("#show-controls")
+          .addEventListener("click", function () {
+            container.hidden = false;
+            container.innerHTML =
+              '<h2>Advanced results</h2><label for="sort-order">Sort order<select id="sort-order" name="sort"><option value="relevance">Relevance</option><option value="price-low">Price: low to high</option></select></label><button id="apply-filter" type="button">Apply filters</button><button id="remove-controls" class="secondary" type="button">Remove filters</button>';
+            history.pushState(
+              { filters: true },
+              "",
+              location.pathname + "?filters=on",
+            );
+            document
+              .querySelector("#apply-filter")
+              .addEventListener("click", function () {
+                status.textContent =
+                  "Filters applied: " +
+                  document.querySelector("#sort-order").value;
+              });
+            document
+              .querySelector("#remove-controls")
+              .addEventListener("click", function () {
+                container.hidden = true;
+                container.replaceChildren();
+                document.querySelector("#show-controls").textContent =
+                  "Show advanced filters";
+              });
+            this.hidden = true;
+          });
+      </script>
+    </main>
+  </body>
+</html>
