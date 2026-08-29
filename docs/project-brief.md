@@ -8,13 +8,13 @@
 
 **Evidence status:** The repository contains an extension prototype. This brief does not certify completion of the MVP or any native ChatGPT/browser compatibility gate.
 
-**Latest runtime evidence:** The [August 28 feasibility experiment](feasibility/2026-08-28.md) demonstrated native shared authoring, the existing execution runtime, and registration removal in Codex. The chosen ChatGPT setup and complete G1–G3 path remain open.
+**Latest runtime evidence:** The [August 28 feasibility experiment](feasibility/2026-08-28.md) demonstrated native shared authoring, the existing execution runtime, and registration removal in Codex. The [August 29 Chrome bridge investigation](feasibility/chrome-agent-bridge-2026-08-29.md) then found the agent's native WebMCP capability unavailable in both the Codex and user-started ChatGPT Work external-Chrome connections, despite successful native registration and page-mediated execution. The chosen path is blocked in the tested setup; G1–G3 remain open pending platform confirmation or an explicit design decision.
 
 This is the repository planning reference for the agreed hackathon MVP. Supporting technical evidence is retained in the [Printing Press and discovery research](research/printing-press-discovery.md). The personal conversation transcript and device-handoff files are not part of the repository.
 
 **Relationship to the prototype:** The existing [extension design](superpowers/specs/2026-08-28-webmcp-polyfill-design.md) describes a narrower DOM-inference runtime and inspector. It is an implementation starting point, not the full Studio product. Map its Capability Graph, adapter hooks, and browser API handling to the canonical config, declarative node palette, and G1–G3 below. Mocked WebMCP tests or inspector invocation alone do not establish native ChatGPT compatibility. No code changes or runtime tests were performed as part of importing this brief.
 
-**The first technical gate is the complete ChatGPT/browser connection:** native Studio WebMCP calls, a supported connection to our extension and the exact user-selected local tab, and native ChatGPT invocation of extension-injected target-site tools. Documentation supports parts of this path; the complete path remains untested. ChatGPT and local-tab discovery are settled choices. A failed experiment requires an explicit design or scope decision, not an unannounced replacement agent, hosted inference service, or relay.
+**The first technical gate is the complete ChatGPT/browser connection:** native Studio WebMCP calls, a supported connection to our extension and the exact user-selected local tab, and native ChatGPT invocation of extension-injected target-site tools. The tested Codex and ChatGPT Work external-Chrome connections both stop at native capability acquisition, so the complete path cannot proceed in the tested setup. ChatGPT and local-tab discovery are settled choices. This failed experiment requires platform confirmation or an explicit design or scope decision, not an unannounced replacement agent, hosted inference service, or relay.
 
 ### How to read this brief
 

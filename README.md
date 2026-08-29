@@ -12,7 +12,7 @@ The [August 28 feasibility report](docs/feasibility/2026-08-28.md) records real 
 
 The [pre-build blocker audit](docs/feasibility/blocker-audit-2026-08-28.md) records the remaining compatibility, safety, and submission gates, with reproducible synthetic checks. Do not use this prototype for authenticated or consequential workflows until its retry, redaction, session, and approval controls are addressed.
 
-The [Chrome agent-bridge investigation](docs/feasibility/chrome-agent-bridge-2026-08-29.md) isolates the current native-consumption failure to the tested agent connection: both page-provided and extension-provided tools fail capability acquisition. It records the supported-product evidence and the remaining desktop ChatGPT Work comparison; it does not claim that every ChatGPT setup is unsupported.
+The [Chrome agent-bridge investigation](docs/feasibility/chrome-agent-bridge-2026-08-29.md) isolates the current native-consumption failure to the tested agent connection: both page-provided and extension-provided tools fail capability acquisition. A subsequent user-run desktop ChatGPT Work check produced the same error and exposed only `pageAssets`. The agreed external-Chrome route is blocked in the tested setup pending platform confirmation; this does not claim that every ChatGPT setup is unsupported.
 
 ## Run
 

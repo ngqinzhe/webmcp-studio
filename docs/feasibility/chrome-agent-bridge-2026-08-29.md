@@ -1,6 +1,6 @@
 # Chrome agent bridge investigation — August 29, 2026
 
-**Assessment: the tested agent-to-Chrome connection does not expose native WebMCP consumption. The installed extension's registration is unlikely to be the cause.** The failure is at acquisition of the agent's `webmcp` capability, before this task can request its native inventory or invoke a native tool. The error alone cannot distinguish an unsupported connector route, feature gating/rollout, or a connector defect.
+**Assessment: the tested Codex and ChatGPT Work agent-to-Chrome connections do not expose native WebMCP consumption. The installed extension's registration is unlikely to be the cause.** The failure is at acquisition of the agent's `webmcp` capability, before either tested agent can request its native inventory or invoke a native tool. The error alone cannot distinguish an unsupported connector route, feature gating/rollout, or a connector defect.
 
 This is a prerequisite for the agreed project, not a minor implementation detail. **Do not assume the full ChatGPT → same local Chrome profile → installed extension workflow is feasible yet.** No settled decision has changed. Three sub-agents independently reviewed OpenAI product support, our registration path, and Chrome/standards integration; the primary agent ran the fresh browser comparison below.
 
@@ -15,6 +15,8 @@ The [machine record](chrome-agent-bridge-2026-08-29.json) captures the fresh run
 | Earlier Chrome run, before project-extension loading | Three ordinary page-provided registrations in Chrome 152; only `pageAssets` advertised to the agent.                                                                    | The same capability error already existed. [Record](chrome-relaunch-2026-08-28.json)                                                               |
 | Earlier installed-extension execution                | Six public page-API calls succeeded through the actual installed registration/executor boundary.                                                                        | The capability still failed afterward on the same tab. [Record](installed-extension-2026-08-29.json)                                               |
 | Earlier separate built-in-browser run                | The repository's runtime exposed tools that the agent discovered and invoked natively.                                                                                  | Positive component control in a different browser implementation; not the installed Chrome path. [Record](native-runtime-reviewed-2026-08-28.json) |
+
+After that recorded comparison, the user ran the requested desktop ChatGPT Work check. Chrome connected and the authoring page visibly reported three browser-API registrations, but Work exposed only `pageAssets`; its `webmcp` capability returned the same error before `studio_get_project` could be invoked.
 
 Ordinary Chrome navigation and DOM inspection succeeded in the fresh comparison. This is not a completely disconnected extension/native-host transport. The only explicitly requested page-side diagnostic operation was one inventory capture; no page-mediated tool execution or native agent call occurred, and B's submission count stayed zero. Registration and runtime inventory activity also occurred automatically.
 
@@ -52,32 +54,27 @@ There is real API-version drift to account for: the tested Chrome page API accep
 
 An inspector or another agent consumer could provide additional component evidence. It would not fulfill the settled ChatGPT requirement, and building a custom connector/relay would be a design change requiring review.
 
-## Decisive remaining check
+## Chosen ChatGPT Work comparison: failed
 
-Use a **user-started desktop ChatGPT Work session with Sol or Terra** and the same Chrome profile. This is the remaining Work-versus-current-Codex comparison; it is not something a sub-agent inside this Codex task can establish by repeating the same connection. No new chat was created automatically.
+The user ran the requested check in desktop ChatGPT Work and pasted its output into this task. It reported:
 
-1. Open `http://127.0.0.1:4174/` in that Chrome profile and explicitly select the tab using `@Chrome` or the browser-tab picker.
-2. Ask for a native `studio_get_project({})` call. Require an actual native Site tools trace and the fixture's native handler event. Clicking or reading the DOM does not pass.
-3. If that works, select `http://127.0.0.1:4176/?marker=work-probe` and ask for native `search_products({"q":"work-native-probe"})`. Retain the native result and the visible search effect.
+- Chrome connected successfully, but native Site tools were unavailable.
+- Capability discovery exposed only `pageAssets`, not `webmcp`.
+- `studio_get_project({})` was not invoked and produced no structured result.
+- The page visibly said “Registered 3 tools with the browser-provided API. Registration alone is not invocation proof.” No visible change followed.
+- Per the stop condition, the second page was not opened and `search_products` was not attempted.
+- Exact error: `Error: Capability is not available: webmcp`.
 
-Suggested prompt for step 2:
+This is user-reported output, not an independently inspected Work trace or settings capture. It is nevertheless the requested test outcome and matches the independently recorded Codex connector failure. The agreed external-Chrome route is therefore **blocked in the tested setup**. This does not establish that every account, rollout, version, or future connector is incapable of WebMCP.
 
-```text
-Use the native WebMCP/Site tools of this selected Chrome tab.
-Call studio_get_project with {} and report its result.
-Do not substitute clicks, browser evaluation, or page JavaScript.
-If native WebMCP is unavailable through this Chrome connection,
-report that explicitly and stop.
-```
+The known built-in-browser success does not solve the requirement to use our MV3 extension in the same local profile. The next step is platform confirmation or an explicit design decision; repeating page registration and execution probes will not resolve this agent-capability boundary.
 
-A positive result must be followed by the installed-tool test and scoped Studio pairing; it does not automatically close G1–G3. A negative result leaves the agreed route blocked pending platform confirmation. The known built-in-browser success does not solve the requirement to use our MV3 extension in the same local profile.
-
-## Platform question if that check cannot pass
+## Platform confirmation needed
 
 The extension guide recommends `/feedback` with the chat ID for unresolved connection problems. The following is a draft only; no feedback or support message has been sent.
 
 > Does desktop ChatGPT Work or Codex support native discovery and invocation of top-level WebMCP tools registered by a third-party MV3 extension in the Chrome profile selected through `@Chrome`? If yes, which desktop/extension versions, rollout eligibility and settings enable it? Does `Capability is not available: webmcp` identify an unsupported route or a disabled feature? Ordinary Chrome control works, native page registration/execution succeeds, and the same capability error occurs with page-provided tools before our extension is loaded.
 
-We have isolated the failing boundary, not repaired the platform connection. The [blocker audit](blocker-audit-2026-08-28.md), missing scoped transport, canonical workflow and safety findings remain open. Any different consumer, relay or companion would require a separate explicit design decision. Safe synthetic foundation work can continue, but the full build schedule should not depend on an unverified native Chrome route.
+We have isolated the failing boundary, not repaired the platform connection. The [blocker audit](blocker-audit-2026-08-28.md), missing scoped transport, canonical workflow and safety findings remain open. Any different consumer, relay or companion would require a separate explicit design decision. Safe synthetic foundation work can continue, but the full build schedule must not depend on the currently failing native Chrome route.
 
 Artifact validation passed: both captured capability errors and zero executions reconciled; all 13 recorded source/evidence hashes matched; all 15 local links across this report and README resolved; Prettier and `git diff --check` passed. Tracked runtime/build sources still match the baseline. No new full-suite run or runtime fix is claimed.
