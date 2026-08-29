@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-08-29T13:08:07.800Z",
+  "localDate": "2026-08-29",
+  "planningTimezone": "Asia/Singapore",
+  "scope": "Current Browser-provider capability advertisement and a registered-tool Chrome control; no native invocation or implementation-internal inspection.",
+  "browserIntegrationPackageVersion": "26.825.32147",
+  "repositoryBaseline": "f59fef8b260c98090220df1f42f632fbc6a6a278",
+  "providerAdvertisement": {
+    "chrome": {
+      "name": "Chrome",
+      "type": "extension",
+      "family": "chrome",
+      "browserCapabilityIds": ["viewport"],
+      "tabCapabilityIds": ["pageAssets"],
+      "webmcpAdvertised": false
+    },
+    "inAppBrowser": {
+      "name": "Codex In-app Browser",
+      "type": "iab",
+      "browserCapabilityIds": ["visibility", "viewport"],
+      "tabCapabilityIds": ["pageAssets", "webmcp"],
+      "webmcpAdvertised": true,
+      "freshTabSelectedOrInvokedInThisRun": false
+    }
+  },
+  "chromeRegisteredFixture": {
+    "url": "http://127.0.0.1:4174/?diagnostic=current-client",
+    "visibleStatus": "Registered 3 tools with the browser-provided API. Registration alone is not invocation proof.",
+    "tabCapabilityIds": ["pageAssets"],
+    "webmcpAdvertised": false,
+    "capabilityRequest": {
+      "available": false,
+      "error": "Error: Capability is not available: webmcp"
+    },
+    "nativeToolInvocationAttempted": false
+  },
+  "userCorrection": {
+    "incorrectPriorAttribution": "The pasted follow-up was recorded as a desktop ChatGPT Work result.",
+    "correctedProvenance": "The user clarified that they were not in ChatGPT Work mode. The exact producing non-Work mode was not recorded.",
+    "independentChatGPTWorkComparisonCompleted": false
+  },
+  "hypothesisAssessment": [
+    {
+      "rank": 1,
+      "hypothesis": "The current external-Chrome provider does not implement or enable the optional webmcp tab capability.",
+      "status": "supported",
+      "evidence": "Chrome advertises only pageAssets on a page visibly reporting three native registrations; the same app's in-app-browser provider advertises webmcp."
+    },
+    {
+      "rank": 2,
+      "hypothesis": "Current mode/model/account eligibility with a different supported consumer explains the difference.",
+      "status": "unresolved",
+      "evidence": "No independent ChatGPT Work Sol/Terra consumer was tested. The provider advertisement is definitive only for the current Codex Chrome provider."
+    },
+    {
+      "rank": 3,
+      "hypothesis": "Stale client or connection state caused the prior result.",
+      "status": "weakened",
+      "evidence": "A newly initialized connection using Browser package 26.825.32147 reproduced the provider advertisement and capability error."
+    },
+    {
+      "rank": 4,
+      "hypothesis": "The project extension's registration, schema, world, or timing causes capability acquisition to fail.",
+      "status": "strongly_disfavored",
+      "evidence": "Chrome accepted/inventoried/executed the extension tool previously; current page-provided registrations still do not add webmcp to the Chrome provider."
+    },
+    {
+      "rank": 5,
+      "hypothesis": "Chrome/WebMCP API-version drift affects provider compatibility.",
+      "status": "possible_provider_implementation_issue_not_diagnosed",
+      "evidence": "The provider exposes no webmcp interface from which inventory or invocation compatibility could be measured."
+    }
+  ],
+  "conclusion": {
+    "immediateCause": "The current Codex Chrome provider does not advertise the optional webmcp tab capability.",
+    "underlyingProviderReasonKnown": false,
+    "currentDirectRouteAvailable": false,
+    "webmcpOrChromeGenerallyImpossible": false,
+    "nextDecision": "Obtain platform/provider support or explicitly review a different consumer/bridge architecture."
+  },
+  "limitations": [
+    "Capability advertisement is an authoritative statement about the supported Browser surface for this connection, not a view of the closed-source provider implementation.",
+    "The in-app-browser differential is provider advertisement plus historical positive invocation evidence; no fresh in-app tab was selected or invoked in this run.",
+    "No Chrome profile, cookies, local storage, hidden transport, direct CDP, or Browser implementation internals were inspected.",
+    "No project runtime, browser setting, extension permission, model, or account was changed.",
+    "The user-pasted non-Work output is retained only as corroborating context and cannot establish ChatGPT Work behavior."
+  ]
+}

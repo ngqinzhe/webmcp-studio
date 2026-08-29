@@ -89,9 +89,17 @@
     "failureBoundary": "The supported agent interface cannot provide its webmcp capability despite native registrations on the Chrome pages.",
     "rootCause": "Unresolved: unsupported connector route, feature gating/rollout, or a connector defect are not distinguished by the observed error.",
     "agreedChatGPTWorkflowVerified": false,
-    "chosenChatGPTWorkProbeReported": true,
-    "chosenChatGPTWorkCapabilityAvailable": false,
-    "currentGateStatus": "blocked_in_tested_setup_pending_platform_confirmation_or_explicit_design_decision"
+    "chosenChatGPTWorkProbeReported": false,
+    "chosenChatGPTWorkCapabilityAvailable": null,
+    "currentGateStatus": "blocked_in_current_chrome_provider_independent_consumer_unverified"
+  },
+  "currentProviderDiagnosis": {
+    "record": "chrome-provider-capabilities-2026-08-29.json",
+    "browserIntegrationPackageVersion": "26.825.32147",
+    "chromeAdvertisedTabCapabilities": ["pageAssets"],
+    "inAppBrowserAdvertisedTabCapabilities": ["pageAssets", "webmcp"],
+    "immediateCause": "The current Codex Chrome provider does not advertise the optional webmcp tab capability.",
+    "underlyingProviderReasonKnown": false
   },
   "confounds": [
     "Both loopback fixtures receive automatic project-extension injection. The first probe confirms page-provided tool registration, not an extension-absent environment.",
@@ -99,7 +107,7 @@
     "The earlier Chrome record predates project-extension loading and already shows the same missing capability; it is historical evidence, not a fresh no-extension control.",
     "The page-provided registration status is fixture-rendered evidence. The extension descriptor was independently observed through the fixture's public getTools button.",
     "Fresh ordinary browser operations succeeded. No native-host repair, profile-store inspection, blocked manager/flag access, hidden transport, direct CDP, or browser-client implementation inspection was used.",
-    "The user later tested a desktop ChatGPT Work session and reported the same missing capability. This follow-up is user-reported evidence, not an independently inspected Work trace or settings capture.",
+    "The user later pasted a result from a non-Work context with the same missing capability. It is not an independent ChatGPT Work comparison.",
     "The openai-docs and Chrome/spec reviews establish public interfaces and documented support; documentation silence does not establish universal lack of support."
   ],
   "priorEvidence": [
@@ -116,9 +124,11 @@
       "finding": "The same runtime source worked with native agent tools in the separate in-app browser fixture; both runtime halves ran in MAIN, not as an installed MV3 extension."
     }
   ],
-  "userReportedWorkFollowUp": {
+  "userReportedNonWorkFollowUp": {
     "recordedDate": "2026-08-29",
-    "source": "User pasted the ChatGPT Work result into the originating Codex task.",
+    "source": "User pasted the result into the originating Codex task, then clarified it did not come from ChatGPT Work.",
+    "chatGPTWorkMode": false,
+    "exactProducingModeRecorded": false,
     "chromeConnected": true,
     "nativeSiteToolsAvailable": false,
     "advertisedCapabilities": ["pageAssets"],
@@ -132,7 +142,7 @@
     "secondPageOpened": false,
     "searchProductsAttempted": false,
     "exactCapabilityError": "Error: Capability is not available: webmcp",
-    "provenanceLimitation": "User-reported output; this task did not inspect ChatGPT Work's internal trace, selected model, versions, rollout state, or settings."
+    "provenanceLimitation": "User-reported output from a non-Work context; it does not test an independent ChatGPT Work consumer. The exact producing mode, model, versions, rollout state, and settings were not captured."
   },
   "sources": {
     "recordedAt": "2026-08-28T16:38:46.372Z",
@@ -161,6 +171,6 @@
       "If native access exists, select http://127.0.0.1:4176/?marker=work-probe and request native search_products with q=work-native-probe.",
       "Retain actual native tool activity and results plus the visible revision/log or search effect; browser clicks or page JavaScript calls are not passing substitutes."
     ],
-    "status": "Completed by the user in desktop ChatGPT Work with a negative result: Chrome connected, only pageAssets was exposed, and webmcp capability acquisition failed before studio_get_project invocation."
+    "status": "Not run. The user clarified that the pasted negative output did not come from ChatGPT Work; it repeats a non-Work/Codex-like Chrome capability result rather than testing an independent consumer."
   }
 }

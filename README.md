@@ -12,7 +12,7 @@ The [August 28 feasibility report](docs/feasibility/2026-08-28.md) records real 
 
 The [pre-build blocker audit](docs/feasibility/blocker-audit-2026-08-28.md) records the remaining compatibility, safety, and submission gates, with reproducible synthetic checks. Do not use this prototype for authenticated or consequential workflows until its retry, redaction, session, and approval controls are addressed.
 
-The [Chrome agent-bridge investigation](docs/feasibility/chrome-agent-bridge-2026-08-29.md) isolates the current native-consumption failure to the tested agent connection: both page-provided and extension-provided tools fail capability acquisition. A subsequent user-run desktop ChatGPT Work check produced the same error and exposed only `pageAssets`. The agreed external-Chrome route is blocked in the tested setup pending platform confirmation; this does not claim that every ChatGPT setup is unsupported.
+The [Chrome agent-bridge investigation](docs/feasibility/chrome-agent-bridge-2026-08-29.md) isolates the current native-consumption failure to the provider boundary: the current Chrome integration advertises only `pageAssets`, while the in-app-browser provider advertises `webmcp`. The user clarified that a pasted follow-up was not a ChatGPT Work run, so that independent comparison remains unperformed. The direct route is blocked in the current Chrome provider; this does not claim that WebMCP or every future provider is incapable.
 
 ## Run
 

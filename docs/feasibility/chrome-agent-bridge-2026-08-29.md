@@ -1,6 +1,6 @@
 # Chrome agent bridge investigation — August 29, 2026
 
-**Assessment: the tested Codex and ChatGPT Work agent-to-Chrome connections do not expose native WebMCP consumption. The installed extension's registration is unlikely to be the cause.** The failure is at acquisition of the agent's `webmcp` capability, before either tested agent can request its native inventory or invoke a native tool. The error alone cannot distinguish an unsupported connector route, feature gating/rollout, or a connector defect.
+**Assessment: the current Codex Chrome provider does not expose native WebMCP consumption. The installed extension's registration is not the failing boundary.** A fresh provider-level comparison shows that Chrome advertises only `pageAssets`, while the in-app-browser provider advertises `pageAssets` and `webmcp`. The Chrome failure therefore occurs before the agent can request native inventory or inspect one of our tool definitions. This identifies the immediate cause without establishing why the provider omits the capability or whether another supported consumer does.
 
 This is a prerequisite for the agreed project, not a minor implementation detail. **Do not assume the full ChatGPT → same local Chrome profile → installed extension workflow is feasible yet.** No settled decision has changed. Three sub-agents independently reviewed OpenAI product support, our registration path, and Chrome/standards integration; the primary agent ran the fresh browser comparison below.
 
@@ -16,7 +16,9 @@ The [machine record](chrome-agent-bridge-2026-08-29.json) captures the fresh run
 | Earlier installed-extension execution                | Six public page-API calls succeeded through the actual installed registration/executor boundary.                                                                        | The capability still failed afterward on the same tab. [Record](installed-extension-2026-08-29.json)                                               |
 | Earlier separate built-in-browser run                | The repository's runtime exposed tools that the agent discovered and invoked natively.                                                                                  | Positive component control in a different browser implementation; not the installed Chrome path. [Record](native-runtime-reviewed-2026-08-28.json) |
 
-After that recorded comparison, the user ran the requested desktop ChatGPT Work check. Chrome connected and the authoring page visibly reported three browser-API registrations, but Work exposed only `pageAssets`; its `webmcp` capability returned the same error before `studio_get_project` could be invoked.
+After that recorded comparison, the user pasted output showing Chrome connected, only `pageAssets` exposed, and the same `webmcp` error. The user later clarified that this output **did not come from ChatGPT Work**. It repeats the current provider symptom and is not an independent Work comparison.
+
+A fresh connection using Browser integration package `26.825.32147` made the provider differential explicit. On the same app host, the Chrome provider advertised one tab capability, `pageAssets`; the in-app-browser provider advertised `pageAssets` and `webmcp`. The port-4174 page still visibly reported three browser-API registrations, while its Chrome tab capability list contained only `pageAssets` and requesting `webmcp` failed. The [provider-capability record](chrome-provider-capabilities-2026-08-29.json) preserves this result.
 
 Ordinary Chrome navigation and DOM inspection succeeded in the fresh comparison. This is not a completely disconnected extension/native-host transport. The only explicitly requested page-side diagnostic operation was one inventory capture; no page-mediated tool execution or native agent call occurred, and B's submission count stayed zero. Registration and runtime inventory activity also occurred automatically.
 
@@ -54,20 +56,19 @@ There is real API-version drift to account for: the tested Chrome page API accep
 
 An inspector or another agent consumer could provide additional component evidence. It would not fulfill the settled ChatGPT requirement, and building a custom connector/relay would be a design change requiring review.
 
-## Chosen ChatGPT Work comparison: failed
+## What is and is not impossible
 
-The user ran the requested check in desktop ChatGPT Work and pasted its output into this task. It reported:
+For the **current Codex Chrome provider**, native WebMCP is unavailable by construction: the provider does not advertise that optional tab capability. Page registration, schema changes, extension reloads, and argument formatting cannot make an unadvertised agent capability appear. Ordinary browser control still works because it uses a different interface.
 
-- Chrome connected successfully, but native Site tools were unavailable.
-- Capability discovery exposed only `pageAssets`, not `webmcp`.
-- `studio_get_project({})` was not invoked and produced no structured result.
-- The page visibly said “Registered 3 tools with the browser-provided API. Registration alone is not invocation proof.” No visible change followed.
-- Per the stop condition, the second page was not opened and `search_products` was not attempted.
-- Exact error: `Error: Capability is not available: webmcp`.
+WebMCP itself is not impossible. Three independent facts remain positive:
 
-This is user-reported output, not an independently inspected Work trace or settings capture. It is nevertheless the requested test outcome and matches the independently recorded Codex connector failure. The agreed external-Chrome route is therefore **blocked in the tested setup**. This does not establish that every account, rollout, version, or future connector is incapable of WebMCP.
+- Chrome's page API inventories and executes the installed extension's native tools.
+- The in-app-browser provider advertises `webmcp`, and earlier native agent calls there succeeded.
+- Chrome documents an experimental WebMCP consumer integration surface, so another provider can be engineered.
 
-The known built-in-browser success does not solve the requirement to use our MV3 extension in the same local profile. The next step is platform confirmation or an explicit design decision; repeating page registration and execution probes will not resolve this agent-capability boundary.
+The settled end-to-end architecture remains unproved because the in-app browser cannot be assumed to host the third-party MV3 extension, while the current external-Chrome provider lacks the agent capability. A provider update could make the direct route viable. A custom connector, relay, different consumer, or page-hosted replacement could also bridge the gap, but each would be an explicit design change rather than a fix to tool registration.
+
+The independent ChatGPT Work comparison has **not** been run. The exact producing mode of the user-pasted output was not captured beyond the clarification that it was not Work. That result must not be used to claim Work support or failure.
 
 ## Platform confirmation needed
 
@@ -77,4 +78,4 @@ The extension guide recommends `/feedback` with the chat ID for unresolved conne
 
 We have isolated the failing boundary, not repaired the platform connection. The [blocker audit](blocker-audit-2026-08-28.md), missing scoped transport, canonical workflow and safety findings remain open. Any different consumer, relay or companion would require a separate explicit design decision. Safe synthetic foundation work can continue, but the full build schedule must not depend on the currently failing native Chrome route.
 
-Artifact validation passed: both captured capability errors and zero executions reconciled; all 13 recorded source/evidence hashes matched; all 15 local links across this report and README resolved; Prettier and `git diff --check` passed. Tracked runtime/build sources still match the baseline. No new full-suite run or runtime fix is claimed.
+Artifact validation passed for the original comparison: both captured capability errors and zero executions reconciled, and all 13 recorded source/evidence hashes matched. The provider follow-up separately validates the advertised capability IDs, corrected provenance, machine records, and local links. Prettier and `git diff --check` passed; tracked runtime/build sources still match the baseline. No new full-suite run or runtime fix is claimed.
