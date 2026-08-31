@@ -21,11 +21,16 @@ import type {
   JsonValue,
 } from "../core/types";
 import {
+  executeNativeModelTool,
+  isJsonSchema,
   nativeModelContext,
+  registerNativeModelTool,
+  toNativeWebMcpTool,
   TARGET_BRIDGE_CHANNEL,
   TARGET_BRIDGE_VERSION,
   isTargetToParentMessage,
   type NativeModelContext,
+  type NativeModelContextTool,
   type ParentToTargetMessage,
   type TargetBridgeError,
   type TargetIdentity,
@@ -42,6 +47,106 @@ interface TargetConfig {
   path: string;
 }
 
+type DiscoveryProvenance = "native" | "inferred";
+type TargetScope = "controlled" | "external";
+type GeneratedPublicationStatus =
+  "draft" | "generated" | "injecting" | "injected" | "testing" | "failed";
+type GeneratedPublicationMode = "native" | "preview" | "unavailable";
+
+interface GeneratedPublication {
+  status: GeneratedPublicationStatus;
+  mode: GeneratedPublicationMode;
+  message?: string;
+}
+
+interface PageToolRegistration {
+  context: NativeModelContext;
+  controller: AbortController;
+  tool: NativeModelContextTool;
+}
+
+interface PendingGeneratedRequest {
+  resolve: (value: unknown) => void;
+  reject: (reason: unknown) => void;
+  timer: number;
+}
+
+interface GeneratedBridgeError {
+  code: string;
+  message: string;
+}
+
+type GeneratedParentToTargetMessage = {
+  channel: typeof TARGET_BRIDGE_CHANNEL;
+  version: typeof TARGET_BRIDGE_VERSION;
+  direction: "parent-to-target";
+} & (
+  | {
+      type: "register-generated-tool";
+      requestId: string;
+      toolName: string;
+      descriptor: TargetToolDescriptor;
+    }
+  | {
+      type: "test-generated-tool";
+      requestId: string;
+      toolName: string;
+      args: JsonValue;
+    }
+);
+
+type GeneratedResultToTargetMessage = {
+  channel: typeof TARGET_BRIDGE_CHANNEL;
+  version: typeof TARGET_BRIDGE_VERSION;
+  direction: "parent-to-target";
+} & (
+  | {
+      type: "generated-tool-result";
+      requestId: string;
+      toolName: string;
+      result: JsonValue;
+    }
+  | {
+      type: "generated-tool-error";
+      requestId: string;
+      toolName: string;
+      error: GeneratedBridgeError;
+    }
+);
+
+type GeneratedTargetToParentMessage = {
+  channel: typeof TARGET_BRIDGE_CHANNEL;
+  version: typeof TARGET_BRIDGE_VERSION;
+  direction: "target-to-parent";
+} & (
+  | {
+      type: "generated-tool-ready";
+      requestId: string;
+      toolName: string;
+      registered: boolean;
+      mode: GeneratedPublicationMode;
+      error?: GeneratedBridgeError;
+    }
+  | {
+      type: "generated-tool-call";
+      requestId: string;
+      toolName: string;
+      args: JsonValue;
+    }
+  | {
+      type: "generated-tool-test-result";
+      requestId: string;
+      toolName: string;
+      result: JsonValue;
+    }
+  | {
+      type: "generated-tool-test-error";
+      requestId: string;
+      toolName: string;
+      error: GeneratedBridgeError;
+    }
+);
+
 interface StudioToolRegistration {
   name: string;
   description: string;
@@ -57,6 +162,7 @@ interface GeneratedTool {
   primitiveNames: string[];
   workflow: Workflow;
   native: boolean;
+  publication: GeneratedPublication;
 }
 
 interface TraceStep {
@@ -215,6 +321,74 @@ function element<T extends Element>(documentValue: Document, id: string): T {
   return node as unknown as T;
 }
 
+function optionalElement<T extends Element>(
+  documentValue: Document,
+  id: string,
+): T | null {
+  return documentValue.getElementById(id) as T | null;
+}
+
+function discoveryProvenance(tool: TargetToolDescriptor): DiscoveryProvenance {
+  return tool.source === "webmcp" ? "native" : "inferred";
+}
+
+function duplicateNames(names: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const name of names) {
+    if (seen.has(name)) duplicates.add(name);
+    seen.add(name);
+  }
+  return Array.from(duplicates);
+}
+
+function toolNameError(value: string): string | null {
+  const name = value.trim().toLowerCase();
+  if (!name) return "Give the generated tool a name.";
+  if (name.length > 48) return "Tool names must be 48 characters or fewer.";
+  if (!/^[a-z][a-z0-9_]*$/.test(name))
+    return "Use lowercase letters, numbers, and underscores; start with a letter.";
+  return null;
+}
+
+function isGeneratedTargetMessage(
+  value: unknown,
+): value is GeneratedTargetToParentMessage {
+  if (!isRecord(value)) return false;
+  if (
+    value.channel !== TARGET_BRIDGE_CHANNEL ||
+    value.version !== TARGET_BRIDGE_VERSION ||
+    value.direction !== "target-to-parent" ||
+    typeof value.type !== "string" ||
+    typeof value.requestId !== "string" ||
+    typeof value.toolName !== "string"
+  )
+    return false;
+  if (value.type === "generated-tool-ready") {
+    return (
+      typeof value.registered === "boolean" &&
+      (value.mode === "native" ||
+        value.mode === "preview" ||
+        value.mode === "unavailable")
+    );
+  }
+  if (
+    value.type === "generated-tool-call" ||
+    value.type === "generated-tool-test-result"
+  )
+    return isJsonValue(
+      value.type === "generated-tool-call" ? value.args : value.result,
+    );
+  if (value.type === "generated-tool-test-error") {
+    return (
+      isRecord(value.error) &&
+      typeof value.error.code === "string" &&
+      typeof value.error.message === "string"
+    );
+  }
+  return false;
+}
+
 function text(value: JsonValue): string {
   try {
     return JSON.stringify(value);
@@ -321,20 +495,28 @@ function readPath(value: unknown, path: string): unknown {
 
 function editableSchema(value: unknown): JSONSchema | null {
   const parsed = parseArguments(value);
-  if (!isRecord(parsed) || Array.isArray(parsed)) return null;
-  const type = parsed.type;
-  if (
-    type !== undefined &&
-    type !== "object" &&
-    type !== "string" &&
-    type !== "number" &&
-    type !== "integer" &&
-    type !== "boolean" &&
-    type !== "array" &&
-    type !== "null"
-  )
-    return null;
-  return cloneJsonSchema(parsed as JSONSchema);
+  return isJsonSchema(parsed) ? cloneJsonSchema(parsed) : null;
+}
+
+function materializeSchemaDefaults(
+  value: unknown,
+  schema: JSONSchema,
+): unknown {
+  if (value === undefined && schema.default !== undefined)
+    return schema.default;
+  if (Array.isArray(value) && schema.items)
+    return value.map((item) => materializeSchemaDefaults(item, schema.items!));
+  if (!isRecord(value) || !schema.properties) return value;
+  const result: Record<string, unknown> = { ...value };
+  for (const [key, propertySchema] of Object.entries(schema.properties)) {
+    if (Object.prototype.hasOwnProperty.call(result, key))
+      result[key] = materializeSchemaDefaults(result[key], propertySchema);
+    else {
+      const withDefault = materializeSchemaDefaults(undefined, propertySchema);
+      if (withDefault !== undefined) result[key] = withDefault;
+    }
+  }
+  return result;
 }
 
 function errorResult(
@@ -406,16 +588,23 @@ export class HostedStudio {
   private readonly pageWindow: Window;
   private readonly targetFrame: HTMLIFrameElement;
   private readonly nativeContext: NativeModelContext | null;
+  private readonly focusedBuilderMarkup: boolean;
   private readonly nativeAbort = new AbortController();
   private readonly nativeRegistrations = new Set<string>();
   private readonly registrationControllers = new Map<string, AbortController>();
   private readonly nativeRegistrationFailures = new Map<string, string>();
   private readonly pending = new Map<string, PendingInvocation>();
+  private readonly pendingGenerated = new Map<
+    string,
+    PendingGeneratedRequest
+  >();
+  private readonly pageRegistrations = new Map<string, PageToolRegistration>();
   private readonly generated = new Map<string, GeneratedTool>();
   private readonly workflowRunner = new WorkflowRunner();
   private readonly messageListener: (event: MessageEvent<unknown>) => void;
   private project: ProjectDocument;
   private targetId: TargetId = "commerce";
+  private targetScope: TargetScope = "controlled";
   private targetMode: TargetRuntimeMode = "preview";
   private targetIdentity: TargetIdentity = {
     id: "commerce",
@@ -435,10 +624,14 @@ export class HostedStudio {
     this.documentValue = options.document ?? document;
     this.pageWindow =
       options.pageWindow ?? this.documentValue.defaultView ?? window;
-    this.targetFrame = element<HTMLIFrameElement>(
-      this.documentValue,
-      "target-frame",
+    this.focusedBuilderMarkup = Boolean(
+      optionalElement(this.documentValue, "site-form") ||
+      optionalElement(this.documentValue, "site-url") ||
+      optionalElement(this.documentValue, "inject-button") ||
+      optionalElement(this.documentValue, "test-generated-tool"),
     );
+    this.ensureSiteInput();
+    this.targetFrame = this.ensureTargetFrame();
     this.nativeContext = nativeModelContext(this.documentValue);
     this.project = createProject("commerce");
     this.messageListener = (event) => {
@@ -468,6 +661,12 @@ export class HostedStudio {
       pending.reject(new Error("Hosted Studio stopped."));
     }
     this.pending.clear();
+    for (const pending of this.pendingGenerated.values()) {
+      this.pageWindow.clearTimeout(pending.timer);
+      pending.reject(new Error("Hosted Studio stopped."));
+    }
+    this.pendingGenerated.clear();
+    this.unregisterPageGeneratedTools();
     this.targetReadyResolver?.();
     this.targetReadyResolver = null;
   }
@@ -481,75 +680,972 @@ export class HostedStudio {
           if (id === "commerce" || id === "travel") this.selectTarget(id);
         });
       });
-    element<HTMLButtonElement>(
+    optionalElement<HTMLButtonElement>(
       this.documentValue,
       "demo-button",
-    ).addEventListener("click", () => {
+    )?.addEventListener("click", () => {
       this.demoRequested = true;
       this.documentValue
         .querySelector(".workspace")
         ?.scrollIntoView({ behavior: "smooth" });
       this.applyDefaultDemoFlow();
     });
-    element<HTMLButtonElement>(
+    optionalElement<HTMLButtonElement>(
       this.documentValue,
       "discover-button",
-    ).addEventListener("click", () => this.requestTargetTools());
-    element<HTMLButtonElement>(
+    )?.addEventListener("click", () => {
+      if (optionalElement(this.documentValue, "site-url"))
+        void this.discoverFromSiteInput();
+      else this.requestTargetTools();
+    });
+    optionalElement<HTMLButtonElement>(
       this.documentValue,
       "compose-button",
-    ).addEventListener("click", () =>
+    )?.addEventListener("click", () =>
       this.composeWorkflow(Array.from(this.selectedNames)),
     );
-    element<HTMLFormElement>(this.documentValue, "tool-form").addEventListener(
-      "submit",
-      (event) => {
-        event.preventDefault();
-        void this.generateFromForm();
-      },
-    );
-    element<HTMLFormElement>(
+    optionalElement<HTMLFormElement>(
+      this.documentValue,
+      "site-form",
+    )?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void this.discoverFromSiteInput();
+    });
+    optionalElement<HTMLInputElement>(
+      this.documentValue,
+      "site-url",
+    )?.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || event.isComposing) return;
+      event.preventDefault();
+      void this.discoverFromSiteInput();
+    });
+    optionalElement<HTMLFormElement>(
+      this.documentValue,
+      "tool-form",
+    )?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void this.generateFromForm();
+    });
+    optionalElement<HTMLFormElement>(
       this.documentValue,
       "external-form",
-    ).addEventListener("submit", (event) => {
+    )?.addEventListener("submit", (event) => {
       event.preventDefault();
       this.showExternalDiscovery();
     });
-    element<HTMLElement>(this.documentValue, "discovery-list").addEventListener(
-      "change",
-      (event) => {
-        const input = event.target;
-        if (
-          !(input instanceof HTMLInputElement) ||
-          input.dataset.name === undefined
+    const discoveryList = optionalElement<HTMLElement>(
+      this.documentValue,
+      "discovery-list",
+    );
+    discoveryList?.addEventListener("change", (event) => {
+      const input = event.target;
+      if (
+        !(input instanceof HTMLInputElement) ||
+        input.dataset.name === undefined
+      )
+        return;
+      const name = input.dataset.name;
+      if (input.checked && !this.draftNames.includes(name)) {
+        this.addPrimitiveToDraft(name);
+        return;
+      }
+      if (!input.checked && this.draftNames.includes(name)) {
+        this.commitDraftNames(
+          this.draftNames.filter((candidate) => candidate !== name),
+          `Removed ${name} from the workflow.`,
+        );
+        return;
+      }
+      this.updateComposerEligibility();
+    });
+    discoveryList?.addEventListener("click", (event) => {
+      const button = event.target;
+      if (!(button instanceof HTMLButtonElement)) return;
+      const action = button.dataset.action;
+      const name = button.dataset.name;
+      if (action === "add-to-workflow" && name) {
+        this.addPrimitiveToDraft(name);
+        return;
+      }
+      if (action === "select-primitive" && name) {
+        this.addPrimitiveToDraft(name);
+      }
+    });
+    discoveryList?.addEventListener("dragstart", (event) => {
+      const target = event.target;
+      const card =
+        target instanceof Element
+          ? target.closest<HTMLElement>(".discovery-card.is-native")
+          : null;
+      const name = card?.dataset.name;
+      if (
+        !card ||
+        !card.draggable ||
+        !name ||
+        !this.nativeTargetTools().some((tool) => tool.name === name)
+      ) {
+        event.preventDefault();
+        return;
+      }
+      this.writeDragPayload(event, { kind: "primitive", name });
+    });
+    const flow = optionalElement<HTMLElement>(
+      this.documentValue,
+      "compose-flow",
+    );
+    const dropzone = flow?.closest<HTMLElement>(".workflow-dropzone") ?? flow;
+    dropzone?.addEventListener("dragover", (event) => {
+      // DataTransfer payloads can be protected during dragover. Always claim
+      // this controlled dropzone, then validate the payload on drop.
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    });
+    dropzone?.addEventListener("drop", (event) => {
+      event.preventDefault();
+      const payload = this.dragPayload(event);
+      if (!payload) return;
+      this.dropPrimitive(payload, event);
+    });
+    flow?.addEventListener("dragstart", (event) => {
+      const target = event.target;
+      const row =
+        target instanceof Element
+          ? target.closest<HTMLElement>("[data-flow-index]")
+          : null;
+      const index = row?.dataset.flowIndex;
+      if (!row || index === undefined) return;
+      this.writeDragPayload(event, {
+        kind: "workflow",
+        name: row.dataset.name ?? "",
+        index: Number(index),
+      });
+    });
+    flow?.addEventListener("click", (event) => {
+      const button = event.target;
+      if (!(button instanceof HTMLButtonElement)) return;
+      const name = button.dataset.name;
+      const index = Number(button.dataset.flowIndex);
+      if (!name || !Number.isInteger(index)) return;
+      if (button.dataset.action === "remove-step") {
+        this.commitDraftNames(
+          this.draftNames.filter((candidate) => candidate !== name),
+          `Removed ${name} from the workflow.`,
+        );
+      } else if (button.dataset.action === "move-step-up" && index > 0) {
+        const next = [...this.draftNames];
+        [next[index - 1], next[index]] = [next[index]!, next[index - 1]!];
+        this.commitDraftNames(next, `Moved ${name} earlier in the workflow.`);
+      } else if (
+        button.dataset.action === "move-step-down" &&
+        index < this.draftNames.length - 1
+      ) {
+        const next = [...this.draftNames];
+        [next[index], next[index + 1]] = [next[index + 1]!, next[index]!];
+        this.commitDraftNames(next, `Moved ${name} later in the workflow.`);
+      }
+    });
+    optionalElement<HTMLElement>(
+      this.documentValue,
+      "generated-list",
+    )?.addEventListener("click", (event) => {
+      const button = event.target;
+      if (!(button instanceof HTMLButtonElement)) return;
+      const name = button.dataset.toolName;
+      if (!name) return;
+      if (button.dataset.action === "inject-generated")
+        void this.injectGeneratedTool(name);
+      else void this.testGeneratedTool(name);
+    });
+    optionalElement<HTMLButtonElement>(
+      this.documentValue,
+      "inject-button",
+    )?.addEventListener("click", () => {
+      const name = this.generatedToolNameFromUi();
+      if (name) void this.injectGeneratedTool(name);
+    });
+    optionalElement<HTMLButtonElement>(
+      this.documentValue,
+      "test-generated-tool",
+    )?.addEventListener("click", () => {
+      const name = this.generatedToolNameFromUi();
+      if (name) void this.testGeneratedTool(name);
+    });
+    const toolName = optionalElement<HTMLInputElement>(
+      this.documentValue,
+      "tool-name",
+    );
+    toolName?.addEventListener("input", () => {
+      this.updateToolNameValidity();
+      this.updateComposerEligibility();
+    });
+    this.updateToolNameValidity();
+    optionalElement<HTMLTextAreaElement>(
+      this.documentValue,
+      "tool-description",
+    )?.addEventListener("input", () => this.updateComposerEligibility());
+  }
+
+  private ensureSiteInput(): void {
+    let input = optionalElement<HTMLInputElement>(
+      this.documentValue,
+      "site-url",
+    );
+    let form = optionalElement<HTMLFormElement>(
+      this.documentValue,
+      "site-form",
+    );
+    if (!input) {
+      input = this.documentValue.createElement("input");
+      input.id = "site-url";
+      input.name = "siteUrl";
+      input.type = "text";
+      input.setAttribute("autocomplete", "url");
+      input.placeholder = "/targets/commerce.html or https://example.com";
+      input.setAttribute(
+        "aria-label",
+        "Site or domain to discover WebMCP tools",
+      );
+    }
+    if (!form) {
+      form = this.documentValue.createElement("form");
+      form.id = "site-form";
+      form.className = "site-discovery-form";
+      const label = this.documentValue.createElement("label");
+      label.htmlFor = "site-url";
+      label.textContent = "Site or domain";
+      const button = this.documentValue.createElement("button");
+      button.type = "submit";
+      button.className = "button button-primary";
+      button.textContent = "Discover tools";
+      form.append(label, input, button);
+      const note = this.documentValue.createElement("p");
+      note.id = "site-note";
+      note.className = "site-note";
+      note.textContent =
+        "Use a controlled target for live tools, or any http(s) site for potential-only analysis.";
+      form.append(note);
+      const workspaceHeading =
+        this.documentValue.querySelector(".workspace-heading");
+      if (workspaceHeading) workspaceHeading.append(form);
+      else
+        (this.documentValue.body ?? this.documentValue.documentElement).prepend(
+          form,
+        );
+    } else if (!form.contains(input)) {
+      form.append(input);
+    }
+    input.value = input.value.trim() || TARGETS.commerce.path;
+  }
+
+  private ensureTargetFrame(): HTMLIFrameElement {
+    const existing = optionalElement<HTMLIFrameElement>(
+      this.documentValue,
+      "target-frame",
+    );
+    if (existing) return existing;
+    const frame = this.documentValue.createElement("iframe");
+    frame.id = "target-frame";
+    frame.title = "Live controlled target website";
+    frame.hidden = true;
+    (this.documentValue.body ?? this.documentValue.documentElement).append(
+      frame,
+    );
+    return frame;
+  }
+
+  private generatedToolNameFromUi(): string | null {
+    const current = Array.from(this.generated.keys()).at(-1);
+    if (current) return current;
+    const input = optionalElement<HTMLInputElement>(
+      this.documentValue,
+      "tool-name",
+    );
+    const name = input?.value.trim().toLowerCase() ?? "";
+    return name || null;
+  }
+
+  private updateToolNameValidity(): void {
+    const input = optionalElement<HTMLInputElement>(
+      this.documentValue,
+      "tool-name",
+    );
+    if (!input) return;
+    const error = toolNameError(input.value);
+    input.setCustomValidity(error ?? "");
+    if (error) input.setAttribute("aria-invalid", "true");
+    else input.removeAttribute("aria-invalid");
+    const help = optionalElement<HTMLElement>(
+      this.documentValue,
+      "tool-name-help",
+    );
+    if (help) {
+      const message = error ?? "Lowercase letters, numbers, and underscores.";
+      if (help.textContent !== message) help.textContent = message;
+      help.classList.toggle("is-error", Boolean(error));
+      help.setAttribute("aria-live", "polite");
+    }
+  }
+
+  private hasFocusedControls(): boolean {
+    return this.focusedBuilderMarkup;
+  }
+
+  private siteInputValue(): string {
+    return (
+      optionalElement<HTMLInputElement>(
+        this.documentValue,
+        "site-url",
+      )?.value.trim() ?? ""
+    );
+  }
+
+  private setSiteInputValue(value: string): void {
+    const input = optionalElement<HTMLInputElement>(
+      this.documentValue,
+      "site-url",
+    );
+    if (input) input.value = value;
+  }
+
+  private resolveSiteInput(
+    rawValue: string,
+  ):
+    | { kind: "controlled"; id: TargetId; url: string }
+    | { kind: "external"; url: string }
+    | { kind: "invalid"; message: string } {
+    const value = rawValue.trim();
+    if (!value)
+      return { kind: "invalid", message: "Enter a site or domain first." };
+    if (value === "commerce" || value === "northstar.test")
+      return {
+        kind: "controlled",
+        id: "commerce",
+        url: TARGETS.commerce.path,
+      };
+    if (value === "travel" || value === "skyline.test")
+      return {
+        kind: "controlled",
+        id: "travel",
+        url: TARGETS.travel.path,
+      };
+
+    let url: URL;
+    try {
+      const candidate = /^[a-z][a-z\d+.-]*:\/\//i.test(value)
+        ? value
+        : value.startsWith("/")
+          ? new URL(value, this.pageWindow.location.href).href
+          : `https://${value}`;
+      url = new URL(candidate, this.pageWindow.location.href);
+    } catch {
+      return {
+        kind: "invalid",
+        message: "Enter a valid http(s) URL or a supported target path.",
+      };
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:")
+      return {
+        kind: "invalid",
+        message: "Only http and https sites can be discovered.",
+      };
+    const origin = pageOrigin(this.pageWindow);
+    for (const target of Object.values(TARGETS)) {
+      if (
+        origin &&
+        url.origin === origin &&
+        url.pathname.replace(/\/$/, "") === target.path
+      )
+        return { kind: "controlled", id: target.id, url: target.path };
+    }
+    return { kind: "external", url: url.href };
+  }
+
+  private async discoverFromSiteInput(): Promise<void> {
+    const resolution = this.resolveSiteInput(this.siteInputValue());
+    const note =
+      optionalElement<HTMLElement>(this.documentValue, "site-status") ??
+      optionalElement<HTMLElement>(this.documentValue, "site-note");
+    if (resolution.kind === "invalid") {
+      this.showSiteMessage(resolution.message, true);
+      return;
+    }
+    if (resolution.kind === "external") {
+      this.activateExternalTarget(resolution.url);
+      if (note)
+        note.textContent =
+          "Potential / inferred capabilities only. Hosted Studio will not inject into a third-party origin; use the optional extension adapter there.";
+      return;
+    }
+    this.setSiteInputValue(resolution.url);
+    this.potentialTools = [];
+    this.renderPotentialTools();
+    if (note)
+      note.textContent =
+        "Live controlled target selected. Discovering page-native WebMCP primitives…";
+    await this.selectTarget(resolution.id);
+    this.requestTargetTools();
+  }
+
+  private showSiteMessage(message: string, error: boolean): void {
+    const note =
+      optionalElement<HTMLElement>(this.documentValue, "site-status") ??
+      optionalElement<HTMLElement>(this.documentValue, "site-note") ??
+      optionalElement<HTMLElement>(this.documentValue, "external-note");
+    if (note) {
+      note.textContent = message;
+      note.classList.toggle("is-error", error);
+      note.classList.toggle("is-success", !error);
+    }
+    this.showComposerMessage(message, error);
+  }
+
+  private activateExternalTarget(rawUrl: string): void {
+    this.targetReadyResolver?.();
+    this.targetReadyResolver = null;
+    this.unregisterGeneratedTools();
+    this.unregisterPageGeneratedTools();
+    this.targetScope = "external";
+    this.potentialTools = this.analyzePotentialUrl(rawUrl);
+    this.targetTools = [];
+    this.targetMode = "preview";
+    this.targetIdentity = {
+      id: "external",
+      name: new URL(rawUrl).hostname,
+      url: rawUrl,
+    };
+    this.selectedNames.clear();
+    this.draftNames = [];
+    this.generated.clear();
+    this.project = createProject(new URL(rawUrl).hostname);
+    this.targetFrame.hidden = true;
+    this.hideTargetLoading(false);
+    this.renderAll();
+    this.showSiteMessage(
+      `${this.targetIdentity.name}: ${this.potentialTools.length} inferred proposal${this.potentialTools.length === 1 ? "" : "s"}. This origin is potential-only and cannot be injected by hosted Studio.`,
+      false,
+    );
+    this.setPipeline("discover");
+  }
+
+  private nativeTargetTools(): TargetToolDescriptor[] {
+    return this.targetScope === "controlled"
+      ? this.targetTools.filter(
+          (tool) => discoveryProvenance(tool) === "native",
         )
-          return;
-        if (input.checked) this.selectedNames.add(input.dataset.name);
-        else this.selectedNames.delete(input.dataset.name);
-        this.updateComposerEligibility();
-      },
+      : [];
+  }
+
+  private writeDragPayload(
+    event: DragEvent,
+    payload: { kind: "primitive" | "workflow"; name: string; index?: number },
+  ): void {
+    if (!event.dataTransfer || !payload.name) return;
+    event.dataTransfer.effectAllowed = "move";
+    const serialized = JSON.stringify(payload);
+    event.dataTransfer.setData("application/x-webmcp-studio", serialized);
+    event.dataTransfer.setData("text/plain", serialized);
+  }
+
+  private dragPayload(
+    event: DragEvent,
+  ): { kind: "primitive" | "workflow"; name: string; index?: number } | null {
+    const value =
+      event.dataTransfer?.getData("application/x-webmcp-studio") ||
+      event.dataTransfer?.getData("text/plain");
+    if (!value) return null;
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (!isRecord(parsed)) return null;
+      if (parsed.kind !== "primitive" && parsed.kind !== "workflow")
+        return null;
+      if (typeof parsed.name !== "string" || !parsed.name) return null;
+      const index =
+        typeof parsed.index === "number" && Number.isInteger(parsed.index)
+          ? parsed.index
+          : undefined;
+      return {
+        kind: parsed.kind,
+        name: parsed.name,
+        ...(index === undefined ? {} : { index }),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private dropPrimitive(
+    payload: { kind: "primitive" | "workflow"; name: string; index?: number },
+    event: DragEvent,
+  ): void {
+    if (!this.nativeTargetTools().some((tool) => tool.name === payload.name)) {
+      this.showComposerMessage(
+        `${payload.name} is inferred and cannot be composed into a live workflow.`,
+        true,
+      );
+      return;
+    }
+    const eventTarget = event.target;
+    const targetRow =
+      eventTarget instanceof Element
+        ? eventTarget.closest<HTMLElement>("[data-flow-index]")
+        : null;
+    let insertion = this.draftNames.length;
+    if (targetRow) {
+      const targetIndex = Number(targetRow.dataset.flowIndex);
+      if (Number.isInteger(targetIndex)) {
+        const bounds = targetRow.getBoundingClientRect();
+        insertion =
+          event.clientY > bounds.top + bounds.height / 2
+            ? targetIndex + 1
+            : targetIndex;
+      }
+    }
+    if (payload.kind === "workflow") {
+      const sourceIndex = this.draftNames.indexOf(payload.name);
+      if (sourceIndex < 0) {
+        this.showComposerMessage(
+          "That workflow step is no longer available. Start the drag again.",
+          true,
+        );
+        return;
+      }
+      const next = this.draftNames.filter((_, index) => index !== sourceIndex);
+      if (insertion > sourceIndex) insertion -= 1;
+      insertion = Math.max(0, Math.min(insertion, next.length));
+      next.splice(insertion, 0, payload.name);
+      this.commitDraftNames(next, `Reordered ${payload.name}.`);
+      return;
+    }
+    if (this.draftNames.includes(payload.name)) {
+      this.showComposerMessage(
+        `${payload.name} is already in the workflow. Reorder it from the canvas.`,
+        true,
+      );
+      return;
+    }
+    const next = [...this.draftNames];
+    next.splice(Math.max(0, Math.min(insertion, next.length)), 0, payload.name);
+    this.commitDraftNames(next, `Added ${payload.name} to the workflow.`);
+  }
+
+  private addPrimitiveToDraft(name: string): void {
+    if (!this.nativeTargetTools().some((tool) => tool.name === name)) {
+      this.showComposerMessage(
+        `${name} is inferred and cannot be composed into a live workflow.`,
+        true,
+      );
+      return;
+    }
+    if (this.draftNames.includes(name)) {
+      this.showComposerMessage(
+        `${name} is already in the workflow. Reorder it from the canvas.`,
+        true,
+      );
+      return;
+    }
+    this.commitDraftNames(
+      [...this.draftNames, name],
+      `Added ${name} to the workflow.`,
     );
-    element<HTMLElement>(this.documentValue, "generated-list").addEventListener(
-      "click",
-      (event) => {
-        const button = event.target;
-        if (!(button instanceof HTMLButtonElement)) return;
-        const name = button.dataset.toolName;
-        if (!name) return;
-        void this.testGeneratedTool(name);
+  }
+
+  private commitDraftNames(
+    names: readonly string[],
+    message?: string,
+  ): boolean {
+    const duplicates = duplicateNames(names);
+    const unknown = this.unknownPrimitiveNames(names);
+    if (duplicates.length > 0) {
+      this.showComposerMessage(
+        `A workflow step can appear only once: ${duplicates.join(", ")}.`,
+        true,
+      );
+      return false;
+    }
+    if (unknown.length > 0) {
+      this.showComposerMessage(
+        `Choose live Native primitives only. Unknown or inferred step${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")}.`,
+        true,
+      );
+      return false;
+    }
+    this.draftNames = [...names];
+    this.selectedNames = new Set(this.draftNames);
+    this.renderDiscoveries();
+    this.renderComposer();
+    this.updateComposerEligibility();
+    this.setPipeline(this.draftNames.length > 0 ? "compose" : "discover");
+    if (message) this.showComposerMessage(message, false);
+    return true;
+  }
+
+  private postGeneratedMessage(
+    message: GeneratedParentToTargetMessage | GeneratedResultToTargetMessage,
+  ): boolean {
+    const frameWindow = this.targetFrame.contentWindow;
+    const origin = pageOrigin(this.pageWindow);
+    if (!frameWindow || !origin) return false;
+    try {
+      frameWindow.postMessage(message, origin);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private waitForGeneratedResponse(
+    requestId: string,
+    timeoutMs = 15_000,
+  ): Promise<unknown> {
+    return new Promise<unknown>((resolve, reject) => {
+      const timer = this.pageWindow.setTimeout(() => {
+        this.pendingGenerated.delete(requestId);
+        reject({
+          code: "execution_timeout",
+          message: "The target page did not answer the generated-tool request.",
+        });
+      }, timeoutMs);
+      this.pendingGenerated.set(requestId, { resolve, reject, timer });
+    });
+  }
+
+  private generatedDescriptor(tool: GeneratedTool): TargetToolDescriptor {
+    return {
+      name: tool.name,
+      description: tool.description,
+      inputSchema: cloneJsonSchema(tool.inputSchema),
+      annotations: {
+        destructiveHint: tool.primitiveNames.some((primitive) =>
+          targetToolIsMutating(
+            this.targetTools.find((candidate) => candidate.name === primitive),
+          ),
+        ),
       },
+      source: "webmcp",
+      confidence: 1,
+      evidence: [
+        {
+          type: "action",
+          note: `Generated from ${tool.primitiveNames.join(" → ")}.`,
+        },
+      ],
+    };
+  }
+
+  private setPublication(
+    name: string,
+    publication: GeneratedPublication,
+  ): void {
+    const tool = this.generated.get(name);
+    if (!tool) return;
+    this.generated.set(name, {
+      ...tool,
+      publication: {
+        ...publication,
+        ...(publication.message ? { message: publication.message } : {}),
+      },
+    });
+    this.persistGeneratedTools();
+    this.renderGenerated();
+    this.updateNativeStatus();
+  }
+
+  private async registerGeneratedOnPage(
+    generated: GeneratedTool,
+  ): Promise<boolean> {
+    let targetDocument: Document | null = null;
+    try {
+      targetDocument = this.targetFrame.contentDocument;
+    } catch {
+      targetDocument = null;
+    }
+    const context = targetDocument ? nativeModelContext(targetDocument) : null;
+    if (!context) return false;
+    this.pageRegistrations.get(generated.name)?.controller.abort();
+    const previous = this.pageRegistrations.get(generated.name);
+    if (previous?.context.unregisterTool) {
+      try {
+        await Promise.resolve(previous.context.unregisterTool(generated.name));
+      } catch {
+        // A host may support abort-only registration cleanup.
+      }
+    }
+    const controller = new AbortController();
+    const tool = toNativeWebMcpTool(
+      this.generatedDescriptor(generated),
+      (input: unknown): Promise<JsonValue> =>
+        this.executeGenerated(generated.name, input),
     );
+    try {
+      const registration = await registerNativeModelTool(context, tool, {
+        signal: controller.signal,
+      });
+      if (!registration.registered || controller.signal.aborted) return false;
+      this.pageRegistrations.set(generated.name, {
+        context,
+        controller,
+        tool,
+      });
+      return true;
+    } catch {
+      controller.abort();
+      return false;
+    }
+  }
+
+  private unregisterPageGeneratedTools(): void {
+    for (const [name, registration] of this.pageRegistrations) {
+      registration.controller.abort();
+      if (registration.context.unregisterTool) {
+        try {
+          void Promise.resolve(registration.context.unregisterTool(name)).catch(
+            () => undefined,
+          );
+        } catch {
+          // Older hosts may expose registration without explicit removal.
+        }
+      }
+    }
+    this.pageRegistrations.clear();
+  }
+
+  private async injectGeneratedTool(name: string): Promise<boolean> {
+    const generated = this.generated.get(name);
+    if (!generated) {
+      this.showComposerMessage(
+        "Generate a tool before publishing it to the target page.",
+        true,
+      );
+      return false;
+    }
+    if (this.targetScope !== "controlled") {
+      this.setPublication(name, {
+        status: "failed",
+        mode: "unavailable",
+        message:
+          "External sites are potential-only. Hosted Studio never injects into a third-party origin.",
+      });
+      this.showComposerMessage(
+        "This is a potential tool. Use the optional extension adapter for external-site instrumentation.",
+        true,
+      );
+      return false;
+    }
+    this.setPublication(name, { status: "injecting", mode: "unavailable" });
+    const requestId = randomId("generated-register");
+    const descriptor = this.generatedDescriptor(generated);
+    const message: GeneratedParentToTargetMessage = {
+      channel: TARGET_BRIDGE_CHANNEL,
+      version: TARGET_BRIDGE_VERSION,
+      direction: "parent-to-target",
+      type: "register-generated-tool",
+      requestId,
+      toolName: generated.name,
+      descriptor,
+    };
+    const posted = this.postGeneratedMessage(message);
+    if (posted) {
+      try {
+        const response = await this.waitForGeneratedResponse(requestId);
+        if (
+          isGeneratedTargetMessage(response) &&
+          response.type === "generated-tool-ready"
+        ) {
+          if (response.registered) {
+            const mode = response.mode;
+            this.setPublication(name, {
+              status: "injected",
+              mode,
+              message:
+                mode === "preview"
+                  ? "The target accepted the generated handler, but native WebMCP is unavailable. Test it as a preview."
+                  : "The generated tool is registered on the target page's native WebMCP context.",
+            });
+            this.setPipeline("generate");
+            return true;
+          }
+          const reason =
+            response.error?.message ?? "The target rejected registration.";
+          this.setPublication(name, {
+            status: "failed",
+            mode: response.mode,
+            message: reason,
+          });
+          this.showComposerMessage(reason, true);
+          return false;
+        }
+      } catch (error) {
+        const messageText = targetErrorMessage(error);
+        this.setPublication(name, {
+          status: "failed",
+          mode: "unavailable",
+          message: messageText,
+        });
+        this.showComposerMessage(messageText, true);
+        return false;
+      }
+    } else {
+      // Keep a same-origin direct registration fallback for a target page that
+      // exposes modelContext but cannot answer the Studio bridge.
+      const direct = await this.registerGeneratedOnPage(generated);
+      if (direct) {
+        this.setPublication(name, {
+          status: "injected",
+          mode: "native",
+          message: "Registered on the target page's native WebMCP context.",
+        });
+        this.setPipeline("generate");
+        return true;
+      }
+    }
+    const messageText =
+      "The target page could not accept the generated tool. You can retry after reloading it, or run a preview in this Studio session.";
+    this.setPublication(name, {
+      status: "failed",
+      mode: "unavailable",
+      message: messageText,
+    });
+    this.showComposerMessage(messageText, true);
+    return false;
+  }
+
+  private async invokePageRegistration(
+    name: string,
+    input: JsonValue,
+  ): Promise<JsonValue | null> {
+    const registration = this.pageRegistrations.get(name);
+    if (!registration) return null;
+    try {
+      if (registration.context.executeTool) {
+        return asJsonValue(
+          await executeNativeModelTool(
+            registration.context,
+            name,
+            registration.tool,
+            input,
+          ),
+        );
+      }
+      return asJsonValue(await registration.tool.execute(input));
+    } catch (error) {
+      return asJsonValue({
+        success: false,
+        status: "execution_failed",
+        toolName: name,
+        stateChanged: false,
+        navigationOccurred: false,
+        warnings: [targetErrorMessage(error)],
+        error: { code: "execution_failed", message: targetErrorMessage(error) },
+        trace: [],
+      });
+    }
+  }
+
+  private async requestPageGeneratedTest(
+    name: string,
+    input: JsonValue,
+  ): Promise<JsonValue> {
+    const requestId = randomId("generated-test");
+    const message: GeneratedParentToTargetMessage = {
+      channel: TARGET_BRIDGE_CHANNEL,
+      version: TARGET_BRIDGE_VERSION,
+      direction: "parent-to-target",
+      type: "test-generated-tool",
+      requestId,
+      toolName: name,
+      args: input,
+    };
+    if (!this.postGeneratedMessage(message))
+      throw new Error("The target page test bridge is unavailable.");
+    const response = await this.waitForGeneratedResponse(requestId);
+    if (!isGeneratedTargetMessage(response))
+      throw new Error(
+        "The target page returned an invalid generated-tool response.",
+      );
+    if (response.type === "generated-tool-test-result") return response.result;
+    if (response.type === "generated-tool-test-error") throw response.error;
+    throw new Error(
+      "The target page returned an unexpected generated-tool response.",
+    );
+  }
+
+  private async testGeneratedTool(name: string): Promise<void> {
+    const generated = this.generated.get(name);
+    if (!generated) {
+      this.showComposerMessage("Generate a tool before testing it.", true);
+      return;
+    }
+    if (this.targetScope !== "controlled") {
+      this.showComposerMessage(
+        "Potential tools cannot be executed by hosted Studio on external sites.",
+        true,
+      );
+      return;
+    }
+    if (generated.publication.status !== "injected") {
+      const injected = await this.injectGeneratedTool(name);
+      if (!injected && this.hasFocusedControls()) {
+        this.showComposerMessage(
+          generated.publication.message ??
+            "Inject the generated tool into the target page before testing it.",
+          true,
+        );
+        return;
+      }
+    }
+    const current = this.generated.get(name);
+    if (!current) return;
+    this.setPublication(name, {
+      ...current.publication,
+      status: "testing",
+    });
+    this.setPipeline("test");
+    const input = this.defaultInputForTarget();
+    let result: JsonValue | null = null;
+    try {
+      result = await this.requestPageGeneratedTest(name, input);
+    } catch (error) {
+      result = await this.invokePageRegistration(name, input);
+      if (result === null)
+        result = errorResult(name, targetErrorMessage(error));
+    }
+    this.renderTraceFromValue(result);
+    const latest = this.generated.get(name);
+    if (latest) {
+      const succeeded = isRecord(result) && result.success === true;
+      this.setPublication(name, {
+        ...latest.publication,
+        status: succeeded
+          ? latest.publication.mode === "unavailable"
+            ? "generated"
+            : "injected"
+          : "failed",
+        ...(succeeded
+          ? {}
+          : {
+              message: targetErrorMessage(
+                isRecord(result) ? result.error : result,
+              ),
+            }),
+      });
+    }
   }
 
   private async registerStudioTools(): Promise<void> {
     const tools: StudioToolRegistration[] = [
       {
         name: "discover_site_tools",
-        description: "Discover the controlled target page's native primitives.",
+        description:
+          "Discover Native WebMCP primitives from a controlled site path, or return clearly labeled Inferred potential tools for an external http(s) site.",
         inputSchema: {
           type: "object",
           properties: {
             target: { type: "string", enum: ["commerce", "travel"] },
+            site: {
+              type: "string",
+              description:
+                "A same-origin /targets/commerce.html or /targets/travel.html path, or an external http(s) URL.",
+            },
             url: {
               type: "string",
               format: "uri",
@@ -562,9 +1658,44 @@ export class HostedStudio {
         annotations: { readOnlyHint: true },
         execute: async (args) => {
           const input = inputRecord(args);
-          const externalUrl = stringValue(input.url).trim();
-          if (externalUrl) {
-            const potential = this.analyzePotentialUrl(externalUrl);
+          const requestedSite =
+            stringValue(input.site).trim() || stringValue(input.url).trim();
+          if (requestedSite) {
+            const resolution = this.resolveSiteInput(requestedSite);
+            if (resolution.kind === "invalid")
+              return asJsonValue({
+                success: false,
+                status: "invalid_arguments",
+                message: resolution.message,
+              });
+            if (resolution.kind === "external") {
+              this.activateExternalTarget(resolution.url);
+              const potential = this.potentialTools;
+              const external = new URL(resolution.url);
+              return asJsonValue({
+                target: {
+                  id: "external",
+                  name: external.hostname,
+                  url: resolution.url,
+                },
+                mode: "potential",
+                status: "potential",
+                provenance: "inferred",
+                tools: potential,
+                note: "Potential proposals are based on available URL/interface hints and are not executable without the optional extension adapter.",
+              });
+            }
+            await this.selectTarget(resolution.id);
+          }
+          const requested = stringValue(input.target);
+          if (
+            !requestedSite &&
+            (requested === "commerce" || requested === "travel")
+          )
+            await this.selectTarget(requested);
+          if (this.targetScope === "external") {
+            const externalUrl = this.targetIdentity.url;
+            const potential = this.potentialTools;
             return asJsonValue({
               target: {
                 id: "external",
@@ -573,17 +1704,16 @@ export class HostedStudio {
               },
               mode: "potential",
               status: "potential",
+              provenance: "inferred",
               tools: potential,
               note: "Potential proposals are based on available URL/interface hints and are not executable without the optional extension adapter.",
             });
           }
-          const requested = stringValue(input.target);
-          if (requested === "commerce" || requested === "travel")
-            await this.selectTarget(requested);
           return asJsonValue({
             target: this.targetIdentity,
             mode: this.targetMode,
             tools: this.targetTools,
+            provenance: this.targetTools.map(discoveryProvenance),
             status: this.targetMode === "native" ? "live" : "preview",
           });
         },
@@ -611,6 +1741,7 @@ export class HostedStudio {
                   status: this.targetTools.includes(tool)
                     ? "live"
                     : "potential",
+                  provenance: discoveryProvenance(tool),
                   tool,
                 }
               : { found: false, name },
@@ -620,7 +1751,7 @@ export class HostedStudio {
       {
         name: "compose_workflow",
         description:
-          "Compose an ordered workflow from controlled target primitive names.",
+          "Compose an ordered structured workflow from unique Native WebMCP primitive names on the selected controlled target.",
         inputSchema: {
           type: "object",
           properties: {
@@ -635,9 +1766,7 @@ export class HostedStudio {
         },
         annotations: {},
         execute: (args) => {
-          const names = this.readPrimitiveNames(
-            inputRecord(args).primitiveNames,
-          );
+          const names = inputRecord(args).primitiveNames;
           return asJsonValue(this.composeWorkflow(names));
         },
       },
@@ -717,14 +1846,17 @@ export class HostedStudio {
     if (!this.nativeContext) return false;
     if (this.nativeRegistrations.has(tool.name)) return true;
     try {
-      const registration = this.nativeContext.registerTool(tool, {
-        signal: controller.signal,
-      });
-      const registrationResult = await Promise.resolve(registration);
-      if (registrationResult === false) {
+      const registration = await registerNativeModelTool(
+        this.nativeContext,
+        tool,
+        { signal: controller.signal },
+      );
+      if (!registration.registered) {
         this.nativeRegistrationFailures.set(
           tool.name,
-          "registerTool returned false.",
+          registration.error instanceof Error
+            ? registration.error.message
+            : "The native WebMCP host rejected the tool.",
         );
         return false;
       }
@@ -835,6 +1967,12 @@ export class HostedStudio {
         primitiveNames,
         workflow,
         native,
+        publication: {
+          status: "generated",
+          mode: "unavailable",
+          message:
+            "Re-inject this session tool into the target page to use it there.",
+        },
       });
     }
     if (this.generated.size > 0) {
@@ -871,7 +2009,9 @@ export class HostedStudio {
     this.targetReadyResolver?.();
     this.targetReadyResolver = null;
     this.unregisterGeneratedTools();
+    this.unregisterPageGeneratedTools();
     this.targetId = id;
+    this.targetScope = "controlled";
     const generation = ++this.targetGeneration;
     this.targetReadyPromise = new Promise<void>((resolve) => {
       this.targetReadyResolver = resolve;
@@ -892,6 +2032,8 @@ export class HostedStudio {
       id === "commerce" ? "northstar.test" : "skyline.test",
     );
     this.targetFrame.src = config.path;
+    this.targetFrame.hidden = false;
+    this.setSiteInputValue(config.path);
     this.hideTargetLoading(true);
     this.renderAll();
     this.documentValue
@@ -917,13 +2059,21 @@ export class HostedStudio {
   private async handleTargetMessage(
     event: MessageEvent<unknown>,
   ): Promise<void> {
-    if (!isTargetToParentMessage(event.data)) return;
+    const generatedMessage = isGeneratedTargetMessage(event.data)
+      ? event.data
+      : null;
     if (event.source !== this.targetFrame.contentWindow) return;
     const expectedOrigin = pageOrigin(this.pageWindow);
     if (!expectedOrigin || event.origin !== expectedOrigin) return;
-    const message: TargetToParentMessage = event.data;
+    if (generatedMessage) {
+      await this.handleGeneratedTargetMessage(generatedMessage);
+      return;
+    }
+    if (!isTargetToParentMessage(event.data)) return;
+    const message = event.data;
     if (message.type === "target-ready") {
       if (message.target.id !== this.targetId) return;
+      this.targetScope = "controlled";
       this.targetIdentity = message.target;
       this.targetMode = message.mode;
       this.targetTools = message.tools.map((tool) => ({
@@ -936,7 +2086,13 @@ export class HostedStudio {
       this.targetReadyResolver?.();
       this.targetReadyResolver = null;
       this.hideTargetLoading(false);
+      this.targetFrame.hidden = false;
+      this.setSiteInputValue(TARGETS[this.targetId].path);
       this.renderAll();
+      this.showSiteMessage(
+        `${this.targetIdentity.name}: ${this.targetTools.length} Native WebMCP primitive${this.targetTools.length === 1 ? "" : "s"} discovered${this.targetMode === "native" ? " and live" : " · preview only"}.`,
+        false,
+      );
       if (this.demoRequested) this.applyDefaultDemoFlow();
       return;
     }
@@ -945,7 +2101,77 @@ export class HostedStudio {
     this.pending.delete(message.requestId);
     this.pageWindow.clearTimeout(pending.timer);
     if (message.type === "tool-result") pending.resolve(message.result);
-    else pending.reject(message.error);
+    else if (message.type === "tool-error") pending.reject(message.error);
+  }
+
+  private async handleGeneratedTargetMessage(
+    message: GeneratedTargetToParentMessage,
+  ): Promise<void> {
+    if (message.type === "generated-tool-call") {
+      const generated = this.generated.get(message.toolName);
+      if (!generated) {
+        this.postGeneratedMessage({
+          channel: TARGET_BRIDGE_CHANNEL,
+          version: TARGET_BRIDGE_VERSION,
+          direction: "parent-to-target",
+          type: "generated-tool-error",
+          requestId: message.requestId,
+          toolName: message.toolName,
+          error: {
+            code: "unknown_tool",
+            message: `Generated tool ${message.toolName} is not available.`,
+          },
+        });
+        return;
+      }
+      try {
+        const result = await this.executeGenerated(
+          generated.name,
+          message.args,
+        );
+        this.postGeneratedMessage({
+          channel: TARGET_BRIDGE_CHANNEL,
+          version: TARGET_BRIDGE_VERSION,
+          direction: "parent-to-target",
+          type: "generated-tool-result",
+          requestId: message.requestId,
+          toolName: message.toolName,
+          result,
+        });
+      } catch (error) {
+        this.postGeneratedMessage({
+          channel: TARGET_BRIDGE_CHANNEL,
+          version: TARGET_BRIDGE_VERSION,
+          direction: "parent-to-target",
+          type: "generated-tool-error",
+          requestId: message.requestId,
+          toolName: message.toolName,
+          error: {
+            code: "execution_failed",
+            message: targetErrorMessage(error),
+          },
+        });
+      }
+      return;
+    }
+    const pending = this.pendingGenerated.get(message.requestId);
+    if (!pending) return;
+    this.pendingGenerated.delete(message.requestId);
+    this.pageWindow.clearTimeout(pending.timer);
+    if (message.type === "generated-tool-test-error") {
+      pending.reject(message.error);
+      return;
+    }
+    if (message.type === "generated-tool-ready" && !message.registered) {
+      pending.reject(
+        message.error ?? {
+          code: "registration_rejected",
+          message: "The target rejected generated-tool registration.",
+        },
+      );
+      return;
+    }
+    pending.resolve(message);
   }
 
   private updateProjectDiscoveries(): void {
@@ -957,7 +2183,7 @@ export class HostedStudio {
       effect: targetToolEffect(tool),
       confidence: tool.confidence ?? 1,
       access: "public",
-      status: "observed",
+      status: discoveryProvenance(tool) === "native" ? "observed" : "inferred",
       evidence: (
         tool.evidence ?? [
           { type: "manual" as const, note: "Controlled target descriptor." },
@@ -1020,7 +2246,9 @@ export class HostedStudio {
 
   private readPrimitiveNames(value: unknown): string[] {
     if (!Array.isArray(value)) return [];
-    const available = new Set(this.targetTools.map((tool) => tool.name));
+    const available = new Set(
+      this.nativeTargetTools().map((tool) => tool.name),
+    );
     return Array.from(
       new Set(
         value.filter(
@@ -1033,7 +2261,9 @@ export class HostedStudio {
 
   private unknownPrimitiveNames(value: unknown): string[] {
     if (!Array.isArray(value)) return ["<invalid primitiveNames>"];
-    const available = new Set(this.targetTools.map((tool) => tool.name));
+    const available = new Set(
+      this.nativeTargetTools().map((tool) => tool.name),
+    );
     return Array.from(
       new Set(
         value.filter(
@@ -1128,53 +2358,64 @@ export class HostedStudio {
     return null;
   }
 
-  private composeWorkflow(names: readonly string[]): JsonValue {
+  private composeWorkflow(names: unknown): JsonValue {
+    const requested = Array.isArray(names) ? names : [];
     const unknown = this.unknownPrimitiveNames(names);
+    const requestedStrings = requested.filter(
+      (name): name is string => typeof name === "string",
+    );
+    const duplicates = duplicateNames(requestedStrings);
     const valid = this.readPrimitiveNames(names);
-    this.draftNames = [...valid];
-    this.renderComposer();
-    this.updateComposerEligibility();
-    this.setPipeline(valid.length > 0 ? "compose" : "discover");
+    const validationMessage =
+      unknown.length > 0
+        ? `Unknown or inferred primitive(s): ${unknown.join(", ")}.`
+        : duplicates.length > 0
+          ? `A workflow step can appear only once: ${duplicates.join(", ")}.`
+          : null;
+    if (!validationMessage) this.commitDraftNames(valid);
     const workflow = hostedWorkflow(valid, this.targetTools);
     const inputSchema = workflowInputSchema(
       this.targetId,
       valid,
       this.targetTools,
     );
-    const validationMessage =
-      unknown.length > 0
-        ? `Unknown primitive(s): ${unknown.join(", ")}.`
-        : this.validateGeneratedDefinition(
-            "draft_workflow",
-            "Draft workflow",
-            inputSchema,
-            valid,
-            workflow,
-          );
+    const definitionMessage =
+      validationMessage ??
+      this.validateGeneratedDefinition(
+        "draft_workflow",
+        "Draft workflow",
+        inputSchema,
+        valid,
+        workflow,
+      );
     return asJsonValue({
-      valid: valid.length > 0 && !validationMessage,
+      valid: valid.length > 0 && !definitionMessage,
       primitiveNames: valid,
       inputSchema,
       workflow,
       target: this.targetIdentity.id,
-      ...(validationMessage ? { error: validationMessage } : {}),
+      ...(definitionMessage ? { error: definitionMessage } : {}),
     });
   }
 
   private async generateFromForm(): Promise<void> {
     const name = stringValue(
-      element<HTMLInputElement>(this.documentValue, "tool-name").value,
+      optionalElement<HTMLInputElement>(this.documentValue, "tool-name")?.value,
+      "buy_best_product",
     )
       .trim()
       .toLowerCase();
     const description = stringValue(
-      element<HTMLTextAreaElement>(this.documentValue, "tool-description")
-        .value,
+      optionalElement<HTMLTextAreaElement>(
+        this.documentValue,
+        "tool-description",
+      )?.value,
+      "Use the selected page primitives to complete the requested task.",
     ).trim();
-    const schemaText = element<HTMLElement>(
+    const schemaText = optionalElement<HTMLElement>(
       this.documentValue,
       "tool-schema",
-    ).textContent;
+    )?.textContent;
     const result = await this.generateTool({
       name,
       description,
@@ -1199,12 +2440,25 @@ export class HostedStudio {
     const name = stringValue(args.name).trim().toLowerCase();
     const description = stringValue(args.description).trim();
     const requestedPrimitiveNames = args.primitiveNames ?? this.draftNames;
-    const unknown = this.unknownPrimitiveNames(requestedPrimitiveNames);
-    const primitiveNames = this.readPrimitiveNames(requestedPrimitiveNames);
-    if (!/^[a-z][a-z0-9_]*$/.test(name))
+    if (this.targetScope !== "controlled")
       return {
         success: false,
-        message: "Use a lowercase name such as buy_best_product.",
+        message:
+          "External sites are potential-only. Select a same-origin controlled target before generating a live tool.",
+      };
+    const requestedNames = Array.isArray(requestedPrimitiveNames)
+      ? requestedPrimitiveNames.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : [];
+    const duplicates = duplicateNames(requestedNames);
+    const unknown = this.unknownPrimitiveNames(requestedPrimitiveNames);
+    const primitiveNames = this.readPrimitiveNames(requestedPrimitiveNames);
+    const nameError = toolNameError(name);
+    if (nameError)
+      return {
+        success: false,
+        message: nameError,
       };
     if (!description)
       return { success: false, message: "A tool description is required." };
@@ -1217,6 +2471,11 @@ export class HostedStudio {
       return {
         success: false,
         message: `Unknown primitive(s): ${unknown.join(", ")}. Discover the target again and choose live primitives.`,
+      };
+    if (duplicates.length > 0)
+      return {
+        success: false,
+        message: `A workflow step can appear only once: ${duplicates.join(", ")}.`,
       };
     if (this.generated.has(name) || this.nativeRegistrations.has(name))
       return {
@@ -1268,6 +2527,12 @@ export class HostedStudio {
       primitiveNames,
       workflow,
       native,
+      publication: {
+        status: "generated",
+        mode: "unavailable",
+        message:
+          "Generated for this session. Publish it to the target page before testing the page-level tool.",
+      },
     };
     this.generated.set(name, generated);
     this.persistGeneratedTools();
@@ -1282,6 +2547,7 @@ export class HostedStudio {
       inputSchema,
       workflow,
       native,
+      publication: generated.publication,
     });
   }
 
@@ -1292,7 +2558,10 @@ export class HostedStudio {
     const generated = this.generated.get(name);
     if (!generated)
       return errorResult(name, `Generated tool ${name} is not available.`);
-    const input = parseArguments(rawInput);
+    const input = materializeSchemaDefaults(
+      parseArguments(rawInput),
+      generated.inputSchema,
+    );
     const result = await this.workflowRunner.run(
       {
         id: `generated-${name}`,
@@ -1409,15 +2678,6 @@ export class HostedStudio {
     this.renderTrace(trace, output);
     if (result.success) this.setPipeline("execute");
     return output;
-  }
-
-  private async testGeneratedTool(name: string): Promise<void> {
-    this.setPipeline("test");
-    const result = await this.executeGenerated(
-      name,
-      this.defaultInputForTarget(),
-    );
-    this.renderTraceFromValue(result);
   }
 
   private defaultInputForTarget(): JsonValue {
@@ -1591,6 +2851,9 @@ export class HostedStudio {
     for (const tool of this.potentialTools) {
       const card = this.documentValue.createElement("article");
       card.className = "discovery-card is-potential";
+      card.dataset.name = tool.name;
+      card.dataset.classification = "inferred";
+      card.dataset.provenance = "inferred";
       const head = this.documentValue.createElement("div");
       head.className = "discovery-card-head";
       const title = this.documentValue.createElement("div");
@@ -1602,8 +2865,13 @@ export class HostedStudio {
       title.append(strong, description);
       const source = this.documentValue.createElement("span");
       source.className = "source-pill potential";
-      source.textContent = "Potential tool";
-      head.append(title, source);
+      source.textContent = "Potential only";
+      const classification = this.documentValue.createElement("span");
+      classification.className = "classification-badge badge-inferred";
+      classification.dataset.classification = "inferred";
+      classification.dataset.tone = "yellow";
+      classification.textContent = "Inferred";
+      head.append(title, classification, source);
       const details = this.documentValue.createElement("div");
       details.className = "discovery-card-details";
       const status = this.documentValue.createElement("span");
@@ -1665,6 +2933,23 @@ export class HostedStudio {
     const live = element<HTMLElement>(this.documentValue, "target-live-label");
     live.textContent = this.targetMode === "native" ? "native" : "preview";
     live.classList.toggle("is-live", this.targetMode === "native");
+    const dot = optionalElement<HTMLElement>(
+      this.documentValue,
+      "target-site-dot",
+    );
+    dot?.classList.toggle(
+      "is-live",
+      this.targetScope === "controlled" && this.targetTools.length > 0,
+    );
+    const targetLabel = optionalElement<HTMLElement>(
+      this.documentValue,
+      "target-preview-label",
+    );
+    if (targetLabel)
+      targetLabel.textContent =
+        this.targetScope === "controlled"
+          ? "controlled target"
+          : "potential only";
     element<HTMLElement>(this.documentValue, "target-tool-count").textContent =
       `${this.targetTools.length} primitive${this.targetTools.length === 1 ? "" : "s"}`;
   }
@@ -1673,9 +2958,13 @@ export class HostedStudio {
     const list = element<HTMLElement>(this.documentValue, "discovery-list");
     list.replaceChildren();
     for (const tool of this.targetTools) {
+      const isNative = discoveryProvenance(tool) === "native";
       const card = this.documentValue.createElement("article");
-      card.className = "discovery-card";
+      card.className = `discovery-card ${isNative ? "is-native" : "is-inferred"}`;
       card.dataset.name = tool.name;
+      card.dataset.classification = isNative ? "native" : "inferred";
+      card.dataset.provenance = isNative ? "native" : "inferred";
+      card.draggable = isNative;
       card.classList.toggle("is-selected", this.selectedNames.has(tool.name));
       const head = this.documentValue.createElement("div");
       head.className = "discovery-card-head";
@@ -1684,6 +2973,7 @@ export class HostedStudio {
       checkbox.type = "checkbox";
       checkbox.checked = this.selectedNames.has(tool.name);
       checkbox.dataset.name = tool.name;
+      checkbox.disabled = !isNative;
       checkbox.setAttribute("aria-label", `Select ${tool.name}`);
       const title = this.documentValue.createElement("div");
       title.className = "discovery-card-title";
@@ -1693,10 +2983,20 @@ export class HostedStudio {
       description.textContent = tool.description;
       title.append(strong, description);
       const source = this.documentValue.createElement("span");
-      source.className = "source-pill";
-      source.textContent =
-        this.targetMode === "native" ? "Live WebMCP" : "Live controlled bridge";
-      head.append(checkbox, title, source);
+      source.className = isNative ? "source-pill" : "source-pill potential";
+      source.textContent = isNative
+        ? this.targetMode === "native"
+          ? "Live WebMCP"
+          : "Controlled preview"
+        : "Inferred proposal";
+      const classification = this.documentValue.createElement("span");
+      classification.className = `classification-badge badge-${
+        isNative ? "native" : "inferred"
+      }`;
+      classification.dataset.classification = isNative ? "native" : "inferred";
+      classification.dataset.tone = isNative ? "green" : "yellow";
+      classification.textContent = isNative ? "Native" : "Inferred";
+      head.append(checkbox, title, classification, source);
       const details = this.documentValue.createElement("div");
       details.className = "discovery-card-details";
       const effect = this.documentValue.createElement("span");
@@ -1722,6 +3022,17 @@ export class HostedStudio {
       const schemaPreview = this.documentValue.createElement("pre");
       schemaPreview.className = "discovery-schema";
       schemaPreview.textContent = text(asJsonValue(tool.inputSchema));
+      const add = this.documentValue.createElement("button");
+      add.type = "button";
+      add.className = "button button-quiet add-primitive";
+      add.dataset.action = "add-to-workflow";
+      add.dataset.name = tool.name;
+      add.disabled = !isNative || this.draftNames.includes(tool.name);
+      add.textContent = this.draftNames.includes(tool.name)
+        ? "Added to workflow"
+        : isNative
+          ? "Add to workflow"
+          : "Inferred · inspect only";
       details.append(
         effect,
         schema,
@@ -1729,6 +3040,7 @@ export class HostedStudio {
         sourceDetail,
         evidence,
         schemaPreview,
+        add,
       );
       card.append(head, details);
       list.append(card);
@@ -1752,6 +3064,8 @@ export class HostedStudio {
         const row = this.documentValue.createElement("li");
         row.className = "flow-discovery";
         row.draggable = true;
+        row.dataset.flowIndex = String(index);
+        row.dataset.name = name;
         const content = this.documentValue.createElement("div");
         const strong = this.documentValue.createElement("strong");
         strong.textContent = name;
@@ -1759,20 +3073,35 @@ export class HostedStudio {
         small.textContent =
           index === 0 ? "starts the workflow" : "receives the previous result";
         content.append(strong, small);
-        const remove = this.documentValue.createElement("button");
-        remove.type = "button";
-        remove.textContent = "×";
-        remove.title = "Remove from flow";
-        remove.addEventListener("click", () => {
-          this.draftNames = this.draftNames.filter(
-            (candidate) => candidate !== name,
-          );
-          this.selectedNames.delete(name);
-          this.renderDiscoveries();
-          this.renderComposer();
-          this.updateComposerEligibility();
-        });
-        row.append(content, remove);
+        const actions = this.documentValue.createElement("div");
+        actions.className = "flow-actions";
+        const controls: Array<[string, string, boolean]> = [
+          ["move-step-up", "Move earlier", index === 0],
+          [
+            "move-step-down",
+            "Move later",
+            index === this.draftNames.length - 1,
+          ],
+          ["remove-step", "Remove from flow", false],
+        ];
+        for (const [action, label, disabled] of controls) {
+          const button = this.documentValue.createElement("button");
+          button.type = "button";
+          button.dataset.action = action;
+          button.dataset.name = name;
+          button.dataset.flowIndex = String(index);
+          button.disabled = disabled;
+          button.title = label;
+          button.setAttribute("aria-label", `${label}: ${name}`);
+          button.textContent =
+            action === "remove-step"
+              ? "×"
+              : action === "move-step-up"
+                ? "↑"
+                : "↓";
+          actions.append(button);
+        }
+        row.append(content, actions);
         flow.append(row);
       }
     }
@@ -1791,6 +3120,7 @@ export class HostedStudio {
     for (const tool of this.generated.values()) {
       const card = this.documentValue.createElement("article");
       card.className = "generated-tool";
+      card.dataset.name = tool.name;
       const copy = this.documentValue.createElement("div");
       const name = this.documentValue.createElement("strong");
       name.textContent = tool.name;
@@ -1799,20 +3129,53 @@ export class HostedStudio {
       const meta = this.documentValue.createElement("div");
       meta.className = "generated-tool-meta";
       const mode = this.documentValue.createElement("span");
-      mode.className = tool.native ? "live" : "";
-      mode.textContent = tool.native
-        ? "live WebMCP registration"
-        : "preview handler · native API unavailable";
+      mode.className = tool.publication.mode === "native" ? "live" : "";
+      mode.textContent =
+        tool.publication.mode === "native"
+          ? "page WebMCP registered"
+          : tool.publication.mode === "preview"
+            ? "page preview handler"
+            : "awaiting page publication";
       const steps = this.documentValue.createElement("span");
       steps.textContent = `${tool.primitiveNames.length} step${tool.primitiveNames.length === 1 ? "" : "s"}`;
       meta.append(mode, steps);
+      const publication = this.documentValue.createElement("span");
+      publication.className = `publication-status publication-${tool.publication.status}`;
+      publication.textContent = this.publicationLabel(tool.publication);
+      meta.append(publication);
       copy.append(name, description, meta);
-      const button = this.documentValue.createElement("button");
-      button.className = "button button-secondary test-tool-button";
-      button.type = "button";
-      button.dataset.toolName = tool.name;
-      button.textContent = "Test tool";
-      card.append(copy, button);
+      const actions = this.documentValue.createElement("div");
+      actions.className = "generated-card-actions";
+      const inject = this.documentValue.createElement("button");
+      inject.className = "button button-secondary test-tool-button";
+      inject.type = "button";
+      inject.dataset.action = "inject-generated";
+      inject.dataset.toolName = tool.name;
+      inject.disabled =
+        tool.publication.status === "injecting" ||
+        tool.publication.status === "testing";
+      inject.textContent =
+        tool.publication.status === "injected"
+          ? "Re-inject"
+          : "Inject into page";
+      const test = this.documentValue.createElement("button");
+      test.className = "button button-primary test-tool-button";
+      test.type = "button";
+      test.dataset.action = "test-generated";
+      test.dataset.toolName = tool.name;
+      test.disabled =
+        tool.publication.status === "injecting" ||
+        tool.publication.status === "testing";
+      test.textContent =
+        tool.publication.mode === "native" ? "Test WebMCP" : "Run preview";
+      actions.append(inject, test);
+      card.append(copy, actions);
+      if (tool.publication.message) {
+        const message = this.documentValue.createElement("small");
+        message.className = "publication-message";
+        message.textContent = tool.publication.message;
+        card.append(message);
+      }
       list.append(card);
     }
     if (this.generated.size === 0) {
@@ -1821,13 +3184,13 @@ export class HostedStudio {
       empty.textContent = "Nothing generated yet.";
       list.append(empty);
     }
-    const liveCount = Array.from(this.generated.values()).filter(
-      (tool) => tool.native,
+    const injectedCount = Array.from(this.generated.values()).filter(
+      (tool) => tool.publication.status === "injected",
     ).length;
     element<HTMLElement>(this.documentValue, "generated-count").textContent =
-      this.nativeContext
-        ? `${liveCount} live`
-        : `${this.generated.size} ready · preview only`;
+      this.generated.size === 0
+        ? "0 ready"
+        : `${injectedCount} injected · ${this.generated.size} ready`;
     const latest =
       Array.from(this.generated.keys()).at(-1) ??
       stringValue(
@@ -1836,6 +3199,54 @@ export class HostedStudio {
       );
     element<HTMLElement>(this.documentValue, "agent-tool-name").textContent =
       latest;
+    const latestTool = latest ? this.generated.get(latest) : undefined;
+    const injectButton = optionalElement<HTMLButtonElement>(
+      this.documentValue,
+      "inject-button",
+    );
+    const testButton = optionalElement<HTMLButtonElement>(
+      this.documentValue,
+      "test-generated-tool",
+    );
+    if (injectButton) {
+      injectButton.disabled =
+        !latestTool ||
+        latestTool.publication.status === "injecting" ||
+        latestTool.publication.status === "testing";
+    }
+    if (testButton) {
+      testButton.disabled =
+        !latestTool ||
+        latestTool.publication.status === "injecting" ||
+        latestTool.publication.status === "testing";
+      testButton.textContent =
+        latestTool?.publication.mode === "native"
+          ? "Test WebMCP"
+          : "Run preview";
+    }
+    const help = optionalElement<HTMLElement>(
+      this.documentValue,
+      "injection-help",
+    );
+    if (help) {
+      help.textContent = latestTool
+        ? latestTool.publication.mode === "native"
+          ? "Registered on the target page. Test the same WebMCP handler an agent can invoke."
+          : "Native WebMCP is unavailable in this browser. Run the controlled preview; it uses the same workflow and visible page effects."
+        : "Generate a tool first. The generated card below keeps the page publication and test actions visible.";
+    }
+  }
+
+  private publicationLabel(publication: GeneratedPublication): string {
+    if (publication.status === "injecting") return "publishing…";
+    if (publication.status === "testing") return "running…";
+    if (publication.status === "failed") return "needs attention";
+    if (publication.status === "injected")
+      return publication.mode === "native"
+        ? "injected · native"
+        : "injected · preview";
+    if (publication.status === "generated") return "generated · ready";
+    return "draft";
   }
 
   private renderTrace(trace: readonly TraceStep[], result: JsonValue): void {
@@ -1911,7 +3322,18 @@ export class HostedStudio {
       this.documentValue,
       "generate-button",
     );
-    generate.disabled = this.draftNames.length === 0;
+    const name = optionalElement<HTMLInputElement>(
+      this.documentValue,
+      "tool-name",
+    );
+    const description = optionalElement<HTMLTextAreaElement>(
+      this.documentValue,
+      "tool-description",
+    );
+    generate.disabled =
+      this.draftNames.length === 0 ||
+      Boolean(name && toolNameError(name.value)) ||
+      Boolean(description && !description.value.trim());
   }
 
   private showComposerMessage(message: string, error: boolean): void {

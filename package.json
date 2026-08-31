@@ -2,7 +2,7 @@
   "name": "webmcp-studio",
   "version": "0.1.0",
   "private": true,
-  "description": "WebMCP Studio is a Chrome MV3 extension that infers semantic WebMCP tools from existing pages.",
+  "description": "WebMCP Studio discovers website capabilities and composes agent-native WebMCP tools.",
   "type": "module",
   "scripts": {
     "build": "npm run typecheck && npm run build:hosted",

@@ -39,9 +39,9 @@
               Turn websites into<br /><em>agent-native interfaces.</em>
             </h1>
             <p class="hero-lede">
-              WebMCP Studio finds the useful actions already hiding in a
-              website, then lets you compose them into a capability an agent can
-              use.
+              Start with a site. Studio reveals its useful actions, helps you
+              compose a higher-level capability, and gives an agent a clear way
+              to use it.
             </p>
             <div class="hero-actions">
               <button
@@ -59,7 +59,7 @@
           </div>
           <div
             class="hero-orbit"
-            aria-label="Studio transforms websites into tools"
+            aria-label="Studio transforms websites into agent tools"
           >
             <div class="orbit-ring orbit-ring-one"></div>
             <div class="orbit-ring orbit-ring-two"></div>
@@ -68,6 +68,7 @@
               <small>studio</small>
             </div>
             <span class="orbit-label orbit-label-top">website</span>
+            <span class="orbit-label orbit-label-left">capabilities</span>
             <span class="orbit-label orbit-label-right">tool</span>
             <span class="orbit-label orbit-label-bottom">agent</span>
           </div>
@@ -98,37 +99,361 @@
         <section class="workspace" aria-label="WebMCP Studio workspace">
           <div class="workspace-heading">
             <div>
-              <p class="section-kicker">The live workbench</p>
-              <h2>From useful actions to one clear capability.</h2>
+              <p class="section-kicker">The focused builder</p>
+              <h2>One site in. One useful tool out.</h2>
             </div>
             <div class="session-badge">
               <span class="pulse"></span> Session-only workspace
             </div>
           </div>
 
-          <div class="workspace-grid">
-            <section class="panel target-panel" aria-labelledby="target-title">
-              <div class="panel-header">
-                <div>
-                  <p class="panel-eyebrow">01 · Website</p>
-                  <h3 id="target-title">Choose a controlled target</h3>
-                </div>
-                <div
-                  class="target-switcher"
-                  role="group"
-                  aria-label="Choose demo target"
+          <section class="panel site-entry" aria-labelledby="site-entry-title">
+            <div class="site-entry-copy">
+              <p class="panel-eyebrow">01 · Website</p>
+              <h3 id="site-entry-title">
+                What should your agent be able to do?
+              </h3>
+              <p>
+                Enter a site or domain to start discovery. Controlled demos are
+                live and executable; other sites are analyzed as potential
+                interfaces only.
+              </p>
+            </div>
+            <form id="site-form" class="site-form" autocomplete="off">
+              <label for="site-url">
+                Site or domain
+                <span class="label-hint">URL or controlled target path</span>
+              </label>
+              <div class="site-input-row">
+                <input
+                  id="site-url"
+                  name="siteUrl"
+                  type="text"
+                  value="/targets/commerce.html"
+                  placeholder="https://your-site.example"
+                  aria-describedby="site-input-help"
+                />
+                <button
+                  id="discover-button"
+                  class="button button-primary"
+                  type="button"
                 >
-                  <button
-                    class="target-tab is-active"
-                    data-target="commerce"
-                    type="button"
-                  >
-                    Commerce
-                  </button>
-                  <button class="target-tab" data-target="travel" type="button">
-                    Travel
-                  </button>
+                  Discover tools <span aria-hidden="true">↗</span>
+                </button>
+              </div>
+              <p id="site-input-help" class="site-input-help">
+                Try a controlled target in one click, or use an external URL for
+                potential-only suggestions.
+              </p>
+              <div
+                class="demo-shortcuts"
+                aria-label="Controlled demo shortcuts"
+              >
+                <span class="shortcut-label">Try a controlled demo</span>
+                <button
+                  class="demo-target-button is-active"
+                  data-target="commerce"
+                  type="button"
+                >
+                  <span>Commerce</span><small>Northstar Supply</small>
+                </button>
+                <button
+                  class="demo-target-button"
+                  data-target="travel"
+                  type="button"
+                >
+                  <span>Travel</span><small>Skyline Travel</small>
+                </button>
+              </div>
+            </form>
+          </section>
+          <p
+            id="site-status"
+            class="site-status"
+            role="status"
+            aria-live="polite"
+          >
+            Choose a site, then discover its page-native actions.
+          </p>
+
+          <div class="builder-grid">
+            <section
+              class="panel discovery-panel"
+              aria-labelledby="discovery-title"
+            >
+              <div class="panel-header panel-header-tight">
+                <div>
+                  <p class="panel-eyebrow">02 · Discovery library</p>
+                  <h3 id="discovery-title">
+                    Page-native actions, made visible.
+                  </h3>
                 </div>
+                <span id="discovery-count" class="count-pill">0 found</span>
+              </div>
+              <p class="panel-copy">
+                Pick the small, typed capabilities an agent can combine into a
+                task. Drag a card or use its checkbox to add it to the workflow.
+              </p>
+              <div class="discovery-legend" aria-label="Discovery legend">
+                <div class="legend-item">
+                  <span class="classification-badge badge-native">Native</span>
+                  <span>Declared by the page through WebMCP</span>
+                </div>
+                <div class="legend-item">
+                  <span class="classification-badge badge-inferred"
+                    >Inferred</span
+                  >
+                  <span>Suggested from interface evidence</span>
+                </div>
+                <div class="legend-runtime">
+                  <span class="runtime-key runtime-live"></span>
+                  <span>Live / Preview is runtime state</span>
+                </div>
+              </div>
+              <div class="library-access-note">
+                <span class="drag-handle" aria-hidden="true">⠿</span>
+                <span>Drag to the canvas</span>
+                <span class="access-divider" aria-hidden="true">or</span>
+                <span class="checkbox-key" aria-hidden="true">✓</span>
+                <span>check to add</span>
+              </div>
+              <div
+                id="discovery-list"
+                class="discovery-list"
+                aria-live="polite"
+                aria-label="Discovered website tools"
+              ></div>
+              <div id="discovery-empty" class="empty-panel">
+                <span class="empty-icon">⌁</span>
+                <strong>Ready to look closer</strong>
+                <span>Discover a controlled target to see its actions.</span>
+              </div>
+              <p
+                id="discovery-error"
+                class="panel-error"
+                role="alert"
+                hidden
+              ></p>
+
+              <section
+                class="external-discovery"
+                aria-labelledby="external-discovery-title"
+              >
+                <div class="external-heading">
+                  <span id="external-discovery-title">Another website?</span>
+                  <span class="classification-badge badge-inferred"
+                    >Inferred only</span
+                  >
+                </div>
+                <form id="external-form" class="external-form">
+                  <label class="sr-only" for="external-url"
+                    >External website URL</label
+                  >
+                  <input
+                    id="external-url"
+                    type="url"
+                    placeholder="https://example.com"
+                    autocomplete="url"
+                  />
+                  <button class="button button-quiet" type="submit">
+                    Analyze
+                  </button>
+                </form>
+                <p id="external-note" class="external-note">
+                  Hosted Studio never injects into third-party origins. The
+                  optional extension adapter is available for advanced
+                  instrumentation.
+                </p>
+                <div id="potential-list" class="potential-list" hidden></div>
+              </section>
+            </section>
+
+            <div class="builder-column">
+              <section
+                class="panel composer-panel"
+                aria-labelledby="composer-title"
+              >
+                <div class="panel-header">
+                  <div>
+                    <p class="panel-eyebrow">03 · Workflow canvas</p>
+                    <h3 id="composer-title">Compose the capability.</h3>
+                  </div>
+                  <span id="composer-state" class="state-label">draft</span>
+                </div>
+                <div class="composer-layout">
+                  <div class="flow-column">
+                    <div class="flow-heading">
+                      <span>Ordered workflow</span>
+                      <span id="flow-count">0 steps</span>
+                    </div>
+                    <div class="workflow-dropzone">
+                      <ol
+                        id="compose-flow"
+                        class="compose-flow"
+                        aria-label="Selected primitive workflow"
+                      ></ol>
+                      <div class="dropzone-callout">
+                        <span class="dropzone-icon" aria-hidden="true">+</span>
+                        <span
+                          >Drop a Native card here to create the next step</span
+                        >
+                      </div>
+                    </div>
+                    <p class="flow-helper">
+                      Structured steps keep the workflow inspectable. Each
+                      result can feed the next primitive.
+                    </p>
+                  </div>
+                  <form id="tool-form" class="tool-form">
+                    <div class="form-section-heading">
+                      <span>Custom WebMCP tool</span>
+                      <span class="typed-label">agent-facing</span>
+                    </div>
+                    <label for="tool-name">Tool name</label>
+                    <input
+                      id="tool-name"
+                      name="toolName"
+                      value="buy_best_product"
+                      pattern="[a-z][a-z0-9_]*"
+                      maxlength="48"
+                      required
+                      aria-describedby="tool-name-help"
+                    />
+                    <p id="tool-name-help" class="field-help">
+                      Lowercase letters, numbers, and underscores.
+                    </p>
+                    <label for="tool-description"
+                      >Agent-facing description</label
+                    >
+                    <textarea
+                      id="tool-description"
+                      name="description"
+                      rows="3"
+                      maxlength="240"
+                    >
+Find the best matching product under the requested price and add it to the cart.</textarea>
+                    <div class="schema-preview">
+                      <div class="schema-title">
+                        <span>Generated input</span
+                        ><span class="typed-label">typed JSON Schema</span>
+                      </div>
+                      <pre
+                        id="tool-schema"
+                        contenteditable="true"
+                        role="textbox"
+                        aria-label="Editable generated input JSON Schema"
+                        spellcheck="false"
+                      >
+Select primitives to preview the input contract.</pre>
+                    </div>
+                    <div class="composer-actions">
+                      <button
+                        id="compose-button"
+                        class="button button-secondary"
+                        type="button"
+                        disabled
+                      >
+                        Compose workflow
+                      </button>
+                      <button
+                        id="generate-button"
+                        class="button button-primary"
+                        type="submit"
+                        disabled
+                      >
+                        Generate tool <span aria-hidden="true">↗</span>
+                      </button>
+                    </div>
+                    <p
+                      id="composer-message"
+                      class="inline-message"
+                      role="status"
+                      aria-live="polite"
+                    ></p>
+                  </form>
+                </div>
+              </section>
+
+              <section class="panel tools-panel" aria-labelledby="tools-title">
+                <div class="panel-header panel-header-tight">
+                  <div>
+                    <p class="panel-eyebrow">04 · Generated tool</p>
+                    <h3 id="tools-title">Publish it to the page.</h3>
+                  </div>
+                  <span id="generated-count" class="count-pill">0 live</span>
+                </div>
+                <p class="panel-copy">
+                  A generated capability stays in this session and can be made
+                  visible to the selected controlled page.
+                </p>
+                <div class="publish-strip">
+                  <div class="publish-copy">
+                    <span class="publish-mark" aria-hidden="true">↗</span>
+                    <span>
+                      <strong>Page publication</strong>
+                      <small
+                        >Use the controlled target as the agent surface.</small
+                      >
+                    </span>
+                  </div>
+                  <div class="generated-actions">
+                    <button
+                      id="inject-button"
+                      class="button button-secondary action-hook"
+                      type="button"
+                      disabled
+                      aria-describedby="injection-help"
+                    >
+                      Inject into page
+                    </button>
+                    <button
+                      id="test-generated-tool"
+                      class="button button-primary action-hook"
+                      type="button"
+                      disabled
+                      aria-describedby="injection-help"
+                    >
+                      Test WebMCP
+                    </button>
+                  </div>
+                </div>
+                <p id="injection-help" class="action-help">
+                  Generate a tool first. The generated card below also keeps the
+                  existing direct test action available.
+                </p>
+                <div id="generated-list" class="generated-list">
+                  <div class="empty-panel compact">
+                    <span class="empty-icon">✦</span
+                    ><span>Nothing generated yet.</span>
+                  </div>
+                </div>
+                <div class="agent-callout">
+                  <div class="agent-callout-mark">AI</div>
+                  <div>
+                    <strong id="agent-callout-title"
+                      >ChatGPT can call this now</strong
+                    >
+                    <p>
+                      Ask: “Use
+                      <code id="agent-tool-name">buy_best_product</code> with
+                      requirements keyboard and max price 200.”
+                    </p>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <div class="outcome-grid">
+            <section class="panel target-panel" aria-labelledby="target-title">
+              <div class="panel-header panel-header-tight">
+                <div>
+                  <p class="panel-eyebrow">Live target</p>
+                  <h3 id="target-title">Watch the page react.</h3>
+                </div>
+                <span id="target-preview-label" class="target-preview-label"
+                  >controlled preview</span
+                >
               </div>
               <div class="target-meta">
                 <div class="target-meta-title">
@@ -164,204 +489,22 @@
               </div>
             </section>
 
-            <section
-              class="panel discovery-panel"
-              aria-labelledby="discovery-title"
-            >
-              <div class="panel-header panel-header-tight">
-                <div>
-                  <p class="panel-eyebrow">02 · Discovered capabilities</p>
-                  <h3 id="discovery-title">What can this page do?</h3>
-                </div>
-                <div class="header-actions">
-                  <span id="discovery-count" class="count-pill">0 found</span>
-                  <button
-                    id="discover-button"
-                    class="button button-quiet"
-                    type="button"
-                  >
-                    Discover now
-                  </button>
-                </div>
-              </div>
-              <p class="panel-copy">
-                These are page-native primitives. Select the small actions an
-                agent should combine into something more useful.
-              </p>
-              <div
-                id="discovery-list"
-                class="discovery-list"
-                aria-live="polite"
-              ></div>
-              <div id="discovery-empty" class="empty-panel">
-                <span class="empty-icon">⌁</span>
-                <strong>Ready to look closer</strong>
-                <span>Start the demo or discover the target page.</span>
-              </div>
-              <div class="external-discovery">
-                <div class="external-heading">
-                  <span>Have another website in mind?</span>
-                  <span class="potential-pill">potential only</span>
-                </div>
-                <form id="external-form" class="external-form">
-                  <label class="sr-only" for="external-url"
-                    >External website URL</label
-                  >
-                  <input
-                    id="external-url"
-                    type="url"
-                    placeholder="https://example.com"
-                    autocomplete="url"
-                  />
-                  <button class="button button-quiet" type="submit">
-                    Analyze
-                  </button>
-                </form>
-                <p id="external-note" class="external-note">
-                  Hosted Studio never injects into third-party origins. Use the
-                  optional extension adapter for advanced instrumentation.
-                </p>
-                <div id="potential-list" class="potential-list" hidden></div>
-              </div>
-            </section>
-
-            <section
-              class="panel composer-panel"
-              aria-labelledby="composer-title"
-            >
-              <div class="panel-header">
-                <div>
-                  <p class="panel-eyebrow">03 · Composer</p>
-                  <h3 id="composer-title">
-                    Make a capability agents understand
-                  </h3>
-                </div>
-                <span id="composer-state" class="state-label">draft</span>
-              </div>
-              <div class="composer-layout">
-                <div class="flow-column">
-                  <div class="flow-heading">
-                    <span>Ordered workflow</span>
-                    <span id="flow-count">0 steps</span>
-                  </div>
-                  <ol
-                    id="compose-flow"
-                    class="compose-flow"
-                    aria-label="Selected primitive workflow"
-                  >
-                    <li class="flow-placeholder">
-                      Select primitives above to start composing.
-                    </li>
-                  </ol>
-                  <p class="flow-helper">
-                    Structured steps, not generated JavaScript. Each output can
-                    feed the next action.
-                  </p>
-                </div>
-                <form id="tool-form" class="tool-form">
-                  <label for="tool-name">Tool name</label>
-                  <input
-                    id="tool-name"
-                    name="toolName"
-                    value="buy_best_product"
-                    pattern="[a-z][a-z0-9_]*"
-                    maxlength="48"
-                    required
-                  />
-                  <label for="tool-description">Agent-facing description</label>
-                  <textarea
-                    id="tool-description"
-                    name="description"
-                    rows="3"
-                    maxlength="240"
-                  >
-Find the best matching product under the requested price and add it to the cart.</textarea>
-                  <div class="schema-preview">
-                    <div class="schema-title">
-                      <span>Generated input</span
-                      ><span class="typed-label">typed JSON Schema</span>
-                    </div>
-                    <pre
-                      id="tool-schema"
-                      contenteditable="true"
-                      role="textbox"
-                      aria-label="Editable generated input JSON Schema"
-                      spellcheck="false"
-                    >
-Select primitives to preview the input contract.</pre>
-                  </div>
-                  <div class="composer-actions">
-                    <button
-                      id="compose-button"
-                      class="button button-secondary"
-                      type="button"
-                      disabled
-                    >
-                      Compose workflow
-                    </button>
-                    <button
-                      id="generate-button"
-                      class="button button-primary"
-                      type="submit"
-                      disabled
-                    >
-                      Generate tool <span aria-hidden="true">↗</span>
-                    </button>
-                  </div>
-                  <p
-                    id="composer-message"
-                    class="inline-message"
-                    role="status"
-                  ></p>
-                </form>
-              </div>
-            </section>
-
-            <section class="panel tools-panel" aria-labelledby="tools-title">
-              <div class="panel-header panel-header-tight">
-                <div>
-                  <p class="panel-eyebrow">04 · Generated tools</p>
-                  <h3 id="tools-title">Ready for an agent</h3>
-                </div>
-                <span id="generated-count" class="count-pill">0 live</span>
-              </div>
-              <p class="panel-copy">
-                Generated tools are registered on this Studio page for the
-                current session.
-              </p>
-              <div id="generated-list" class="generated-list">
-                <div class="empty-panel compact">
-                  <span class="empty-icon">✦</span
-                  ><span>Nothing generated yet.</span>
-                </div>
-              </div>
-              <div class="agent-callout">
-                <div class="agent-callout-mark">AI</div>
-                <div>
-                  <strong id="agent-callout-title"
-                    >ChatGPT can call this now</strong
-                  >
-                  <p>
-                    Ask: “Use
-                    <code id="agent-tool-name">buy_best_product</code> with
-                    requirements keyboard and max price 200.”
-                  </p>
-                </div>
-              </div>
-            </section>
-
             <section class="panel trace-panel" aria-labelledby="trace-title">
               <div class="panel-header panel-header-tight">
                 <div>
                   <p class="panel-eyebrow">05 · Execution trace</p>
                   <h3 id="trace-title">
-                    See the capability travel through the page
+                    See the capability travel through the page.
                   </h3>
                 </div>
                 <span id="trace-status" class="trace-status"
                   >awaiting a run</span
                 >
               </div>
+              <p class="trace-intro">
+                Every node is a real primitive call, so failures point to the
+                exact step that needs attention.
+              </p>
               <div class="trace-rail" aria-hidden="true">
                 <span id="trace-rail-fill" class="trace-rail-fill"></span>
               </div>

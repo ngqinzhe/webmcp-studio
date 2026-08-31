@@ -1,5 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const hostedSpecSelected = process.argv.some((argument) =>
+  argument.includes("hosted-studio-flow"),
+);
+
 export default defineConfig({
   testDir: "./tests/e2e",
   timeout: 30_000,
@@ -15,10 +19,14 @@ export default defineConfig({
     headless: true,
     baseURL: "http://127.0.0.1:4173",
   },
-  webServer: {
-    command: "node scripts/serve-demo.mjs --port 4173",
-    url: "http://127.0.0.1:4173/search.html",
-    reuseExistingServer: true,
-    timeout: 15_000,
-  },
+  ...(hostedSpecSelected
+    ? {}
+    : {
+        webServer: {
+          command: "node scripts/serve-demo.mjs --port 4173",
+          url: "http://127.0.0.1:4173/search.html",
+          reuseExistingServer: true,
+          timeout: 15_000,
+        },
+      }),
 });

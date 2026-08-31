@@ -23,18 +23,19 @@ Open the deployed `https://<studio-domain>/` URL in ChatGPT's WebMCP-capable
 browser. This is the complete first-run path: no extension installation,
 cloning, API key, account, terminal, or configuration is required.
 
-1. Click **Try the 60-second demo**.
-2. In **Discovered capabilities**, click **Discover now** if the cards are not
-   already visible. Select the commerce primitives
-   `search_products`, `filter_products`, `get_product`, and `add_to_cart`.
-3. Click **Compose workflow**, then **Generate tool**. Keep the example name
-   `buy_best_product` and its typed input schema.
-4. Click **Test tool** for the deterministic page-local check. With a native
-   WebMCP host connected, ask ChatGPT to use `buy_best_product` with
-   requirements `keyboard` and max price `200`.
-5. Watch the trace resolve the primitive calls and confirm that Northstar
-   Supply visibly narrows to the selected product and the cart count becomes
-   `1`.
+1. Click **Try the 60-second demo** (or enter `/targets/commerce.html` in
+   **Site or domain**).
+2. Click **Discover tools** and look for the five green **Native** cards,
+   including `view_cart`. The focused example uses `search_products`,
+   `filter_products`, `get_product`, and `add_to_cart`.
+3. Drag those cards into the workflow canvas, keep the name
+   `buy_best_product`, and click **Generate tool**.
+4. Click **Inject into page**, then **Test WebMCP**. If the browser does not
+   expose native WebMCP, the honest fallback is **Run preview**.
+5. In a native WebMCP browser, ask ChatGPT to use `buy_best_product` with
+   requirements `keyboard` and max price `200`. Watch the trace resolve the
+   primitive calls and confirm that Northstar Supply visibly narrows to the
+   selected product and the cart count becomes `1`.
 
 The header must say **WebMCP live** before a run is described as native
 WebMCP evidence. **Preview only** keeps discovery, composition, and the local
