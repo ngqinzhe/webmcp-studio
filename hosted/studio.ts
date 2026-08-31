@@ -1734,12 +1734,18 @@ export class HostedStudio {
           const tool =
             this.targetTools.find((candidate) => candidate.name === name) ??
             this.potentialTools.find((candidate) => candidate.name === name);
+          const status =
+            this.targetScope === "external"
+              ? "potential"
+              : this.targetMode === "native"
+                ? "live"
+                : "preview";
           return asJsonValue(
             tool
               ? {
                   found: true,
                   status: this.targetTools.includes(tool)
-                    ? "live"
+                    ? status
                     : "potential",
                   provenance: discoveryProvenance(tool),
                   tool,
