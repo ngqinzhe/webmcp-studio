@@ -46,15 +46,14 @@ checks.
 ```bash
 npm install
 npm run build
-python3 -m http.server 4177 --directory dist
+npm run serve:hosted
 ```
 
-Open `http://127.0.0.1:4177/`. The build emits the hosted shell, bundled
-Studio and controlled targets, and `dist/server/index.js`. Python's static
-server is sufficient for a UI/preview walkthrough, but it does not reproduce
-the production response headers or public HTTPS; use the deployed URL to
-validate the native ChatGPT/WebMCP connection. `npm run demo` remains the
-separate extension fixture server described below.
+Open `http://127.0.0.1:4177/`. The hosted server includes the same-origin
+`POST /api/analyze-external` inspection route and production-style response
+headers, so external analysis and the controlled preview behave like the
+deployed site. `npm run demo` remains the separate extension fixture server
+described below.
 
 ## Optional extension adapter
 

@@ -119,8 +119,10 @@
               ></div>
               <div id="discovery-empty" class="empty-panel">
                 <span class="empty-icon">⌁</span>
-                <strong>Nothing analyzed yet</strong>
-                <span>Enter a domain above to see its tools.</span>
+                <strong id="discovery-empty-title">Nothing analyzed yet</strong>
+                <span id="discovery-empty-copy"
+                  >Enter a domain above to see its tools.</span
+                >
               </div>
               <p
                 id="discovery-error"
@@ -302,9 +304,31 @@ Select tools to preview the input shape.</pre>
             <div class="target-frame-wrap">
               <iframe
                 id="target-frame"
-                title="Live controlled target website"
+                title="Live target website"
                 src="/targets/commerce.html"
+                referrerpolicy="no-referrer"
               ></iframe>
+              <div
+                id="target-frame-fallback"
+                class="target-frame-fallback"
+                hidden
+              >
+                <span class="empty-icon">↗</span>
+                <strong id="target-frame-fallback-title"
+                  >Preview unavailable</strong
+                >
+                <p id="target-frame-fallback-copy">
+                  This site does not allow embedded previews.
+                </p>
+                <a
+                  id="target-open-link"
+                  href="#"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  Open site in a new tab <span aria-hidden="true">↗</span>
+                </a>
+              </div>
               <div
                 id="target-loading"
                 class="target-loading"

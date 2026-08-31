@@ -19,8 +19,9 @@ const indexSource = resolve(hosted, "index.html");
 const stylesSource = resolve(hosted, "styles.css");
 const studioSource = resolve(hosted, "studio.ts");
 const hostingSource = resolve(root, ".openai/hosting.json");
+const externalDiscoverySource = resolve(root, "scripts/external-discovery.mjs");
 
-for (const path of [indexSource, stylesSource, demo]) {
+for (const path of [indexSource, stylesSource, demo, externalDiscoverySource]) {
   if (!existsSync(path)) throw new Error(`Missing hosted build input: ${path}`);
 }
 
@@ -105,7 +106,7 @@ writeFileSync(resolve(dist, "index.html"), index);
 
 const securityHeaders = {
   "Content-Security-Policy":
-    "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-src 'self'",
+    "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-src 'self' https:",
   "Permissions-Policy": "tools=(self)",
   "Origin-Agent-Cluster": "?1",
   "Referrer-Policy": "strict-origin-when-cross-origin",
@@ -116,6 +117,7 @@ const securityHeaders = {
 
 const server = resolve(dist, "server");
 mkdirSync(server, { recursive: true });
+cpSync(externalDiscoverySource, resolve(server, "external-discovery.mjs"));
 if (existsSync(hostingSource)) {
   mkdirSync(resolve(dist, ".openai"), { recursive: true });
   cpSync(hostingSource, resolve(dist, ".openai/hosting.json"));
@@ -143,7 +145,9 @@ const embeddedAssets = Object.fromEntries(
 );
 writeFileSync(
   resolve(server, "index.js"),
-  `const SECURITY_HEADERS = ${JSON.stringify(securityHeaders, null, 2)};
+  `import { handleExternalDiscovery } from "./external-discovery.mjs";
+
+const SECURITY_HEADERS = ${JSON.stringify(securityHeaders, null, 2)};
 const EMBEDDED_ASSETS = ${JSON.stringify(embeddedAssets)};
 
 function withSecurityHeaders(response) {
@@ -172,6 +176,10 @@ function embeddedAssetResponse(request) {
 
 export default {
   async fetch(request, env) {
+    const pathname = new URL(request.url).pathname;
+    if (pathname === "/api/analyze-external") {
+      return withSecurityHeaders(await handleExternalDiscovery(request));
+    }
     const embedded = embeddedAssetResponse(request);
     if (embedded) return embedded;
     if (env.ASSETS && typeof env.ASSETS.fetch === "function") {

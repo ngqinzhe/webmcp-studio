@@ -43,6 +43,7 @@ Use the repository's normal build from the project root:
 ```bash
 npm install
 npm run build
+npm run serve:hosted
 ```
 
 `npm run build` type-checks the project and builds the hosted site. The hosted
@@ -57,6 +58,7 @@ dist/assets/travel.js
 dist/targets/commerce.html
 dist/targets/travel.html
 dist/server/index.js
+dist/server/external-discovery.mjs
 ```
 
 The primary build intentionally leaves out the optional extension. Run
@@ -64,16 +66,11 @@ The primary build intentionally leaves out the optional extension. Run
 advanced external-site instrumentation; run `npm run build` again before
 packaging the hosted deployment.
 
-For a local UI walkthrough, serve that directory as static files:
-
-```bash
-python3 -m http.server 4177 --directory dist
-```
-
-Then open `http://127.0.0.1:4177/`. This simple server does not add the
-production security headers and is not a substitute for the public HTTPS
-judge check. `npm run demo` serves the older extension fixtures on port 4173;
-it is intentionally separate from the hosted shell.
+For a local walkthrough, run `npm run serve:hosted` and open
+`http://127.0.0.1:4177/`. This server includes the same-origin
+`/api/analyze-external` route and mirrors the production security headers.
+`npm run demo` serves the older extension fixtures on port 4173; it is
+intentionally separate from the hosted shell.
 
 Hosted UI verification:
 
@@ -103,6 +100,7 @@ saving a Site version:
 
 ```text
 dist/server/index.js
+dist/server/external-discovery.mjs
 dist/index.html
 dist/assets/studio.js
 dist/targets/commerce.html
@@ -132,10 +130,10 @@ if (env.ASSETS && typeof env.ASSETS.fetch === "function") {
 return withSecurityHeaders(new Response("Not Found", { status: 404 }));
 ```
 
-Route the public HTTPS hostname to this Worker and keep `/`, `/assets/*`, and
-`/targets/*` on that same origin. The browser application has no server API
-route, database, inference service, or required runtime secret in the core
-demo.
+Route the public HTTPS hostname to this Worker and keep `/`, `/assets/*`,
+`/targets/*`, and `/api/analyze-external` on that same origin. The core demo
+has no database, inference service, API key, or required runtime secret; the
+single inspection route fetches and analyzes bounded public HTML on demand.
 
 ## Environment variables
 
@@ -183,7 +181,7 @@ registration into an external origin.
 The production Worker currently emits these response policies:
 
 ```text
-Content-Security-Policy: default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-src 'self'
+Content-Security-Policy: default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-src 'self' https:
 Permissions-Policy: tools=(self)
 Origin-Agent-Cluster: ?1
 Referrer-Policy: strict-origin-when-cross-origin
@@ -191,11 +189,13 @@ X-Content-Type-Options: nosniff
 X-Frame-Options: SAMEORIGIN
 ```
 
-`connect-src 'self'` and the absence of an application API keep the primary
-flow self-contained. Do not add `Access-Control-Allow-Origin: *` as a shortcut
-for external-site discovery. If a future API is introduced, allowlist exact
-origins and methods, validate request origins and input on the server, and
-keep credentials out of cross-origin browser calls.
+`connect-src 'self'` keeps the browser call to the inspection route same-origin.
+The route does not need CORS, and it must not add
+`Access-Control-Allow-Origin: *`. It accepts only a JSON URL, omits request
+credentials, validates public web hosts and every redirect, enforces bounded
+HTML size and timeouts, and returns sanitized evidence. Production HTTPS
+Studio requires external inspection URLs to use HTTPS; same-origin controlled
+target paths remain available for the deterministic demo.
 
 ## WebMCP support and Permissions Policy
 
@@ -260,6 +260,37 @@ page-scoped discovery and execution where the browser grants access, subject
 to the target's authentication, CSP, frame, and permission boundaries. It is
 not bundled into the hosted URL and must never be required for the controlled
 commerce/travel demo.
+
+### External inspection contract
+
+The hosted path makes external analysis evidence-based through a same-origin
+request:
+
+```text
+POST /api/analyze-external
+Content-Type: application/json
+
+{"url":"https://example.com/catalog"}
+```
+
+The Worker follows a small number of redirects only when each destination
+passes the same public-host validation. It fetches HTML without caller
+credentials, limits the response size and fetch time, reads page title, forms,
+buttons, and potential `modelContext` declarations, and returns sanitized
+selectors, schemas, and confidence. A URL word such as `booking` or `shop`
+cannot create a tool by itself. A fetched `modelContext` declaration is still
+shown as **Inferred** because a server fetch cannot verify the live browser
+registration on a third-party origin.
+
+External pages are loaded into the live target preview only when the target's
+own framing policy and the browser permit it. `frame-src 'self' https:` allows
+HTTPS frames from the Studio, but `X-Frame-Options` and
+`Content-Security-Policy: frame-ancestors` on the target can still block the
+preview. In that case Studio shows a clear fallback link to open the page in a
+new tab. The parent page never reads the external DOM, sends the WebMCP bridge
+to it, injects JavaScript, or executes inferred tools. Use the optional
+extension adapter only when external-site instrumentation is explicitly
+appropriate.
 
 ## Troubleshooting a deployed URL
 

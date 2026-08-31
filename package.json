@@ -9,6 +9,7 @@
     "build:all": "npm run build && npm run build:extension",
     "build:extension": "node scripts/build-extension.mjs",
     "build:hosted": "node scripts/build-hosted.mjs",
+    "serve:hosted": "node scripts/serve-hosted.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
