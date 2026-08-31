@@ -120,9 +120,31 @@ if (existsSync(hostingSource)) {
   mkdirSync(resolve(dist, ".openai"), { recursive: true });
   cpSync(hostingSource, resolve(dist, ".openai/hosting.json"));
 }
+
+const hostedAssets = [
+  ["index.html", "text/html; charset=utf-8"],
+  ["styles.css", "text/css; charset=utf-8"],
+  ["assets/studio.js", "text/javascript; charset=utf-8"],
+  ["assets/commerce.js", "text/javascript; charset=utf-8"],
+  ["assets/travel.js", "text/javascript; charset=utf-8"],
+  ["targets/commerce.html", "text/html; charset=utf-8"],
+  ["targets/travel.html", "text/html; charset=utf-8"],
+];
+const embeddedAssets = Object.fromEntries(
+  hostedAssets
+    .filter(([relativePath]) => existsSync(resolve(dist, relativePath)))
+    .map(([relativePath, contentType]) => [
+      `/${relativePath}`,
+      {
+        contentType,
+        body: readFileSync(resolve(dist, relativePath), "utf8"),
+      },
+    ]),
+);
 writeFileSync(
   resolve(server, "index.js"),
   `const SECURITY_HEADERS = ${JSON.stringify(securityHeaders, null, 2)};
+const EMBEDDED_ASSETS = ${JSON.stringify(embeddedAssets)};
 
 function withSecurityHeaders(response) {
   const headers = new Headers(response.headers);
@@ -136,10 +158,27 @@ function withSecurityHeaders(response) {
   });
 }
 
+function embeddedAssetResponse(request) {
+  const pathname = new URL(request.url).pathname;
+  const asset = EMBEDDED_ASSETS[pathname === "/" ? "/index.html" : pathname];
+  if (!asset) return null;
+  return withSecurityHeaders(
+    new Response(request.method === "HEAD" ? null : asset.body, {
+      status: 200,
+      headers: { "Content-Type": asset.contentType },
+    }),
+  );
+}
+
 export default {
   async fetch(request, env) {
-    const response = await env.ASSETS.fetch(request);
-    return withSecurityHeaders(response);
+    const embedded = embeddedAssetResponse(request);
+    if (embedded) return embedded;
+    if (env.ASSETS && typeof env.ASSETS.fetch === "function") {
+      const response = await env.ASSETS.fetch(request);
+      return withSecurityHeaders(response);
+    }
+    return withSecurityHeaders(new Response("Not Found", { status: 404 }));
   },
 };
 `,
