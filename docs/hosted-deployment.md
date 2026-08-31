@@ -11,13 +11,25 @@ Before publishing a URL, confirm that a clean browser session can:
 
 1. Open the HTTPS Studio URL without an account, API key, extension, or local
    configuration.
-2. Click **Try the 60-second demo** and discover the controlled commerce
-   primitives.
-3. Compose and generate `buy_best_product` from the discovered actions.
-4. See **WebMCP live** when the supported WebMCP host is connected, then ask
-   ChatGPT to invoke the generated tool.
-5. See the execution trace and the target page change, including the cart count
-   becoming `1`.
+2. Enter `/targets/commerce.html` (or the public controlled URL) in **Site or
+   domain** and click **Discover tools**.
+3. See discovered cards labelled **Native** in green. If potential interface
+   suggestions are shown, they must be labelled **Inferred** in yellow and kept
+   out of the executable workflow.
+4. Drag `search_products`, `filter_products`, `get_product`, and `add_to_cart`
+   into the workflow, name it `buy_best_product`, and click **Generate tool**.
+5. Click **Inject into page**. In a supported WebMCP host, confirm that the
+   target page's `document.modelContext` now contains `buy_best_product`.
+6. Click **Test WebMCP** and confirm the trace reaches every primitive and the
+   target page changes, including the cart count becoming `1`.
+
+When native WebMCP is unavailable, the final action must be labelled **Run
+preview**. A preview validates the controlled workflow and visible page effect,
+but it is not evidence that ChatGPT discovered or invoked a native tool.
+
+The intended 60-second judge path is:
+
+`Site or domain → Discover tools → Native primitives → drag workflow → Generate tool → Inject into page → Test WebMCP`
 
 Use **Preview only** as a useful fallback for unsupported browsers, but do not
 count a preview handler or a direct page-local test as proof that ChatGPT
@@ -62,6 +74,19 @@ production security headers and is not a substitute for the public HTTPS
 judge check. `npm run demo` serves the older extension fixtures on port 4173;
 it is intentionally separate from the hosted shell.
 
+Focused-builder verification:
+
+```bash
+npm run build
+npm test -- tests/unit/target-runtime-injection.test.ts
+npx playwright test tests/e2e/hosted-studio-flow.spec.ts
+```
+
+The hosted E2E creates a clean browser context with no extension. Its synthetic
+native host exercises the browser registration boundary and is not proof of a
+ChatGPT connection. Repeat the final flow in the supported ChatGPT/WebMCP
+browser before claiming native agent invocation.
+
 ## Sites deployment contract
 
 The Sites deployment must publish the exact successful `dist/` output and the
@@ -91,22 +116,25 @@ must serve the same origin for `/`, `/assets/*`, and `/targets/*`.
 
 ## Cloudflare-style output contract
 
-`dist/server/index.js` is a small module Worker entrypoint. It delegates static
-requests to the provider's asset binding:
+`dist/server/index.js` is a small module Worker entrypoint. The build embeds
+the allowlisted Studio HTML, CSS, JavaScript, and controlled target pages so a
+static-assets binding is not required for the core demo. It also uses an
+`ASSETS` binding when the provider supplies one, which lets a host add its
+normal static asset pipeline without changing the application:
 
 ```js
-export default {
-  async fetch(request, env) {
-    return env.ASSETS.fetch(request);
-  },
-};
+const embedded = embeddedAssetResponse(request);
+if (embedded) return embedded;
+if (env.ASSETS && typeof env.ASSETS.fetch === "function") {
+  return withSecurityHeaders(await env.ASSETS.fetch(request));
+}
+return withSecurityHeaders(new Response("Not Found", { status: 404 }));
 ```
 
-Configure the hosting provider's static-assets binding with the exact name
-`ASSETS` and route requests to this Worker. Sites supplies that binding; a
-Cloudflare-style deployment must provide the equivalent binding. The browser
-application has no server API route, database, or inference service in the
-core demo.
+Route the public HTTPS hostname to this Worker and keep `/`, `/assets/*`, and
+`/targets/*` on that same origin. The browser application has no server API
+route, database, inference service, or required runtime secret in the core
+demo.
 
 ## Environment variables
 
@@ -138,6 +166,19 @@ that checks both `event.source` and the expected origin. Same-origin framing is
 an intentional security boundary; it is not a reason to enable permissive
 cross-origin access.
 
+Generated page tools use the same checked bridge. **Inject into page** sends a
+JSON-safe generated descriptor and structured workflow identity to the selected
+controlled target. The target registers that descriptor with its own
+`document.modelContext`; the handler resolves the existing workflow runtime and
+primitive bridge. **Test WebMCP** invokes that page registration with the
+deterministic demo input, so the trace and visible state change come from the
+same page-facing handler an agent would use. Registration is session-scoped and
+is invalidated when the target changes or the page is reloaded.
+
+Injection is not arbitrary JavaScript injection. It is available only for the
+controlled same-origin targets. The hosted Studio never publishes a generated
+registration into an external origin.
+
 The production Worker currently emits these response policies:
 
 ```text
@@ -158,11 +199,15 @@ keep credentials out of cross-origin browser calls.
 ## WebMCP support and Permissions Policy
 
 The Studio and controlled target pages use the browser-provided
-`document.modelContext.registerTool` API (with the supported browser's
-equivalent exposure where available). The application does not install a fake
+`modelContext.registerTool` API, accepting the compatible `provideTool` spelling
+where a supported host exposes it. The application does not install a fake
 `modelContext` when the API is absent. Native registrations are attempted on
-the top-level Studio and target documents; generated tools are registered for
-the current page/session and are not a durable public registry.
+the top-level Studio and target documents. Studio's native tools remain
+available on the Studio page; an injected generated tool is registered on the
+selected controlled target page for the current session and is not a durable
+public registry. The registration payload keeps the native WebMCP shape
+(`name`, `description`, `inputSchema`, `annotations`, `execute`) and does not
+send Studio-only evidence metadata across the browser boundary.
 
 Native behavior depends on all of these conditions:
 
@@ -190,19 +235,22 @@ judging. Useful references are the [WebMCP specification](https://webmachinelear
 [ChatGPT WebMCP guidance](https://learn.chatgpt.com/docs/webmcp).
 
 When registration is unavailable or rejected, the UI must remain explicit:
-**Preview only · WebMCP unavailable**. Preview discovery and the controlled
-parent bridge can demonstrate the workflow UI, but they do not manufacture an
-agent capability or claim native invocation. Reloading in a supported
-browser/profile after fixing the origin or policy is the recovery path.
+**Preview only · WebMCP unavailable** and **Run preview**. Preview discovery
+and the controlled parent bridge can demonstrate the workflow UI, but they do
+not manufacture an agent capability or claim native invocation. Reloading in a
+supported browser/profile after fixing the origin or policy is the recovery
+path. A failed injection leaves the generated workflow editable so it can be
+retried after the target or browser state is fixed.
 
 ## External URL discovery and the optional adapter
 
 An external URL entered in hosted Studio is a **Discovered/Potential Tool**
-source only. The hosted page does not inject JavaScript, persist WebMCP
-registrations, read a third-party DOM, or turn that origin into an executable
-tool. Browser same-origin and CORS rules make that boundary explicit. The UI
-must keep potential metadata visually distinct from a **Live/Executable
-WebMCP Tool**.
+source only. Its proposals are **Inferred**, shown in yellow, and never
+eligible for the live workflow canvas. The hosted page does not inject
+JavaScript, persist WebMCP registrations, read a third-party DOM, or turn that
+origin into an executable tool. Browser same-origin and CORS rules make that
+boundary explicit. The UI must keep inferred/potential metadata visually
+distinct from a **Native** **Live/Executable WebMCP Tool**.
 
 For advanced external-site instrumentation, build and load the optional
 extension from `dist/extension`, grant the browser's requested tab/site access,
@@ -224,6 +272,10 @@ commerce/travel demo.
 - **Target calls fail:** inspect the visible execution trace. The runtime
   validates typed input and stops at the first primitive error; fix the input
   or reload the clean session rather than retrying an uncertain mutating call.
+- **Inject into page is unavailable:** confirm that the selected target is one
+  of the same-origin controlled paths and that a generated workflow exists.
+  External URLs are intentionally potential-only; unsupported native hosts use
+  **Run preview**.
 - **External URL is potential-only:** this is expected for the hosted path;
   use the optional extension adapter only when explicit site access is
   appropriate.
