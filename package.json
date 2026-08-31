@@ -5,8 +5,10 @@
   "description": "WebMCP Studio is a Chrome MV3 extension that infers semantic WebMCP tools from existing pages.",
   "type": "module",
   "scripts": {
-    "build": "npm run typecheck && npm run build:extension",
+    "build": "npm run typecheck && npm run build:hosted",
+    "build:all": "npm run build && npm run build:extension",
     "build:extension": "node scripts/build-extension.mjs",
+    "build:hosted": "node scripts/build-hosted.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -5,13 +5,20 @@ import type {
   InspectorState,
   WebMcpStatus,
 } from "./types";
+import type { WebMcpToolDescriptor } from "./compiler";
+import type { ObservedRequestPage } from "./project";
 
 export const BRIDGE_CHANNEL = "webmcp-studio";
 export const BRIDGE_VERSION = 1 as const;
 
 export type BridgeRequestPayload =
   | { type: "init"; token: string }
-  | { type: "sync-tools"; capabilities: Capability[]; enabled: boolean }
+  | {
+      type: "sync-tools";
+      capabilities: Capability[];
+      enabled: boolean;
+      workflowTools?: WebMcpToolDescriptor[];
+    }
   | { type: "invoke"; requestId: string; capabilityId: string; args: unknown }
   | { type: "get-status" };
 
@@ -50,7 +57,40 @@ export type ExtensionMessage =
       args: unknown;
       tabId?: number;
     }
+  | {
+      type: "polyfill:test-project";
+      project: unknown;
+      toolId: string;
+      args: unknown;
+      approval?: unknown;
+      tabId?: number;
+    }
+  | {
+      type: "polyfill:perform-browser-action";
+      sessionId: string;
+      capabilityId: string;
+      args: unknown;
+      expectedObservation: string;
+      /** The current draft scope, supplied by Studio and validated in content. */
+      project?: unknown;
+      approval?: unknown;
+      tabId?: number;
+    }
+  | {
+      type: "polyfill:read-observed-requests";
+      sessionId: string;
+      cursor?: string;
+      tabId?: number;
+    }
   | { type: "polyfill:get-graph"; tabId?: number }
+  | {
+      type: "polyfill:activate-project";
+      project: unknown;
+      approval: unknown;
+      tabId?: number;
+    }
+  | { type: "polyfill:deactivate-project"; tabId?: number }
+  | { type: "polyfill:get-project"; tabId?: number }
   | {
       type: "polyfill:state-update";
       state: InspectorState;
@@ -62,6 +102,10 @@ export type ExtensionResponse =
   | { ok: true; state: InspectorState }
   | { ok: true; graph: CapabilityGraph | null }
   | { ok: true; result: ExecutionResult }
+  | { ok: true; action: ExecutionResult }
+  | { ok: true; requests: ObservedRequestPage }
+  | { ok: true; project: unknown | null }
+  | { ok: true; workflow: unknown }
   | { ok: true; started: true }
   | { ok: false; error: string };
 

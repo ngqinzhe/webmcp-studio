@@ -9,6 +9,7 @@ import type {
   InspectorState,
   JsonValue,
 } from "../../core/types";
+import { initializeStudio } from "./studio";
 
 type ExtensionCommand = Exclude<
   ExtensionMessage,
@@ -461,7 +462,12 @@ function isExecutionFailureCode(value: unknown): boolean {
     value === "execution_timeout" ||
     value === "unsupported_control" ||
     value === "invalid_arguments" ||
-    value === "registration_rejected"
+    value === "registration_rejected" ||
+    value === "approval_required" ||
+    value === "scope_blocked" ||
+    value === "session_expired" ||
+    value === "cancelled" ||
+    value === "ambiguous_delivery"
   );
 }
 
@@ -502,7 +508,42 @@ function isInspectorState(value: unknown): value is InspectorState {
         typeof value.lastExecution.capabilityId === "string" &&
         isExecutionResult(value.lastExecution.result))) &&
     typeof value.enabled === "boolean" &&
+    (value.runtimeGeneration === undefined ||
+      typeof value.runtimeGeneration === "string") &&
+    (value.activeProject === undefined ||
+      value.activeProject === null ||
+      (isRecord(value.activeProject) &&
+        typeof value.activeProject.projectId === "string" &&
+        isNonNegativeInteger(value.activeProject.revision) &&
+        typeof value.activeProject.snapshotHash === "string" &&
+        isNonNegativeInteger(value.activeProject.tabId) &&
+        typeof value.activeProject.origin === "string" &&
+        typeof value.activeProject.runtimeGeneration === "string" &&
+        typeof value.activeProject.approved === "boolean" &&
+        isStringArray(value.activeProject.toolNames))) &&
     isFiniteNumber(value.updatedAt)
+  );
+}
+
+function isObservedRequestPage(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.sessionId === "string" &&
+    typeof value.observationId === "string" &&
+    Array.isArray(value.entries) &&
+    value.entries.every(
+      (entry) =>
+        isRecord(entry) &&
+        typeof entry.id === "string" &&
+        typeof entry.url === "string" &&
+        typeof entry.origin === "string" &&
+        typeof entry.path === "string" &&
+        optionalString(entry, "initiatorType") &&
+        isFiniteNumber(entry.observedAt),
+    ) &&
+    optionalString(value, "nextCursor") &&
+    isFiniteNumber(value.captureStartedAt) &&
+    typeof value.available === "boolean"
   );
 }
 
@@ -522,15 +563,31 @@ function isExtensionResponse(value: unknown): value is ExtensionResponse {
   if (value.ok === false) {
     return (
       typeof value.error === "string" &&
-      !["state", "graph", "result", "started"].some((key) => key in value)
+      ![
+        "state",
+        "graph",
+        "result",
+        "action",
+        "requests",
+        "project",
+        "workflow",
+        "started",
+      ].some((key) => key in value)
     );
   }
   if (value.ok !== true) return false;
   if ("error" in value) return false;
 
-  const variants = ["state", "graph", "result", "started"].filter(
-    (key) => key in value,
-  );
+  const variants = [
+    "state",
+    "graph",
+    "result",
+    "action",
+    "requests",
+    "project",
+    "workflow",
+    "started",
+  ].filter((key) => key in value);
   if (variants.length !== 1) return false;
   switch (variants[0]) {
     case "state":
@@ -539,6 +596,14 @@ function isExtensionResponse(value: unknown): value is ExtensionResponse {
       return value.graph === null || isCapabilityGraph(value.graph);
     case "result":
       return isExecutionResult(value.result);
+    case "action":
+      return isExecutionResult(value.action);
+    case "requests":
+      return isObservedRequestPage(value.requests);
+    case "project":
+      return value.project === null || isRecord(value.project);
+    case "workflow":
+      return isRecord(value.workflow);
     case "started":
       return value.started === true;
     default:
@@ -1027,3 +1092,4 @@ chrome.runtime.onMessage.addListener((message: unknown, sender) => {
 });
 
 void loadState();
+initializeStudio();

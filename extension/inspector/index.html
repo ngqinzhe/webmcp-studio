@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>WebMCP Studio Inspector</title>
+    <title>WebMCP Studio</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
@@ -11,120 +11,216 @@
       <div class="brand-lockup">
         <div class="brand-mark" aria-hidden="true">⌁</div>
         <div>
-          <p class="eyebrow">Developer tools</p>
-          <h1>WebMCP Studio</h1>
+          <p class="eyebrow">WebMCP Studio</p>
+          <h1>Compose a tool from this tab</h1>
         </div>
       </div>
       <div class="topbar-actions">
-        <span id="connection-state" class="status-chip muted">Connecting</span
-        ><button id="rescan" class="button secondary" type="button">
-          Rescan page
+        <span id="studio-tab-status" class="status-chip muted">Connecting</span>
+        <button
+          id="studio-pause"
+          class="button secondary"
+          type="button"
+          disabled
+        >
+          Pause
+        </button>
+        <button
+          id="studio-takeover"
+          class="button secondary"
+          type="button"
+          disabled
+        >
+          Human takeover
+        </button>
+        <button
+          id="studio-login"
+          class="button secondary"
+          type="button"
+          disabled
+        >
+          Log in
+        </button>
+        <button
+          id="studio-resume"
+          class="button primary"
+          type="button"
+          disabled
+        >
+          Resume
+        </button>
+        <button
+          id="studio-disconnect"
+          class="button danger"
+          type="button"
+          disabled
+        >
+          Disconnect
         </button>
       </div>
     </header>
+
     <main class="shell">
-      <section class="hero panel">
-        <div class="hero-copy">
-          <p class="eyebrow">Live capability graph</p>
-          <h2 id="page-title">Waiting for a page</h2>
-          <p id="page-url" class="muted-copy">
-            Activate the extension on a browser tab to inspect its visible UI.
+      <section class="studio-hero panel" aria-labelledby="studio-heading">
+        <div>
+          <p class="eyebrow">Current tab</p>
+          <h2 id="studio-heading">Discoveries are ready to compose</h2>
+          <p id="studio-page-title" class="studio-page-title">
+            Waiting for the selected page
+          </p>
+          <div class="studio-domain-display" aria-label="Discovered domain">
+            <span class="field-label">Discovered domain</span>
+            <code id="studio-domain-display">Detecting…</code>
+          </div>
+          <p id="studio-page-url" class="muted-copy">
+            Attach the extension to a browser tab to begin.
           </p>
         </div>
-        <label class="toggle-row" for="enabled"
-          ><span
-            ><strong>Register inferred tools</strong
-            ><small>Keep the page's native WebMCP tools untouched.</small></span
-          ><input id="enabled" type="checkbox" checked /><span
-            class="toggle"
-            aria-hidden="true"
-          ></span
-        ></label>
+        <div class="studio-live-state">
+          <p
+            id="studio-control-summary"
+            class="studio-control-summary"
+            role="status"
+          >
+            Waiting for the selected tab's live control state.
+          </p>
+          <p id="studio-connection-copy" class="muted-copy">
+            Studio is limited to the exact tab that opened it.
+          </p>
+        </div>
       </section>
-      <section class="metrics" aria-label="Page status">
-        <article class="metric panel">
-          <span>WebMCP</span><strong id="webmcp-state">Unknown</strong
-          ><small id="webmcp-methods">No runtime status yet</small>
-        </article>
-        <article class="metric panel">
-          <span>Native tools</span><strong id="native-count">0</strong
-          ><small>Provided by the page</small>
-        </article>
-        <article class="metric panel">
-          <span>Inferred tools</span><strong id="inferred-count">0</strong
-          ><small>Generated from semantic UI</small>
-        </article>
-        <article class="metric panel">
-          <span>Adapter tools</span><strong id="adapter-count">0</strong
-          ><small>Site-specific graph changes</small>
-        </article>
+
+      <section class="studio-intro panel" aria-labelledby="studio-heading">
+        <div class="studio-intro-copy">
+          <p class="eyebrow">Discovery-first authoring</p>
+          <h2>Drag page capabilities into a new tool</h2>
+          <p id="studio-stage" class="muted-copy">
+            Discoveries are captured automatically from the current tab. Drop
+            one or more into the flow, name the tool, then save it back to the
+            page.
+          </p>
+        </div>
+        <div class="studio-availability" id="studio-availability" role="status">
+          Waiting for live discoveries…
+        </div>
+        <p id="studio-status" class="studio-status" role="status">
+          Looking for available discoveries…
+        </p>
       </section>
-      <section class="workspace">
-        <aside class="capabilities panel">
+
+      <section class="studio-compose" aria-label="Compose a custom WebMCP tool">
+        <section
+          class="panel discovery-panel"
+          aria-labelledby="discoveries-heading"
+        >
           <div class="section-heading">
             <div>
-              <p class="eyebrow">Capabilities</p>
-              <h2>What this page can do</h2>
+              <p class="eyebrow">Available now</p>
+              <h2 id="discoveries-heading">Discoveries</h2>
             </div>
-            <span id="blocked-count" class="count-badge">0 blocked</span>
+            <span id="studio-discovery-count" class="count-badge">0</span>
           </div>
-          <div id="capability-list" class="capability-list" aria-live="polite">
-            <div class="empty-state">No capabilities discovered yet.</div>
-          </div>
-        </aside>
-        <section class="details panel" aria-live="polite">
-          <div id="capability-detail" class="empty-state large">
-            Select a capability to inspect its contract.
+          <p class="muted-copy discovery-help">
+            These capabilities come from the selected page. Drag a card into the
+            flow; protected actions stay unavailable until the signed-in session
+            is verified.
+          </p>
+          <div
+            id="studio-discoveries"
+            class="discovery-list"
+            aria-live="polite"
+          >
+            <div class="empty-state">Waiting for the current tab's graph.</div>
           </div>
         </section>
-      </section>
-      <section class="lower-grid">
-        <section class="panel invocation-panel">
+
+        <section class="panel flow-panel" aria-labelledby="flow-heading">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">Visible UI test</p>
-              <h2>Invoke capability</h2>
+              <p class="eyebrow">New custom tool</p>
+              <h2 id="flow-heading">Ordered flow</h2>
+            </div>
+            <span id="studio-revision" class="count-badge">revision 0</span>
+          </div>
+          <label class="tool-name-field" for="studio-tool-name">
+            <span class="field-label">Tool name</span>
+            <input
+              id="studio-tool-name"
+              name="tool-name"
+              placeholder="search_products"
+              autocomplete="off"
+            />
+          </label>
+          <div
+            id="studio-compose-flow"
+            class="compose-flow"
+            aria-live="polite"
+            aria-label="Ordered discovery flow"
+          >
+            <div class="drop-placeholder">
+              Drop discoveries here to build the tool.
             </div>
           </div>
-          <p id="invoke-help" class="muted-copy">
-            Choose a capability above, then provide JSON arguments.
-          </p>
-          <label class="field-label" for="arguments">Arguments</label
-          ><textarea id="arguments" spellcheck="false" rows="7">{}</textarea>
-          <div class="button-row">
-            <button id="invoke" class="button primary" type="button" disabled>
-              Invoke selected tool</button
-            ><button
-              id="export"
-              class="button secondary"
+          <div class="flow-footer">
+            <p id="studio-compose-hint" class="muted-copy">
+              Each card becomes one sequential page action.
+            </p>
+            <button
+              id="studio-save-inject"
+              class="button primary"
               type="button"
               disabled
             >
-              Export adapter seed
+              Save &amp; inject
             </button>
           </div>
-          <div id="execution-result" class="result-box muted-copy">
-            No invocation yet.
-          </div>
-        </section>
-        <section class="panel graph-panel">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">Canonical representation</p>
-              <h2>Graph snapshot</h2>
-            </div>
-            <button id="graph-toggle" class="text-button" type="button">
-              Show JSON
-            </button>
-          </div>
-          <p class="muted-copy">
-            The graph is the boundary between detection, adapters, locators,
-            execution, and registration.
-          </p>
-          <pre id="graph-json" class="json-view hidden" tabindex="0"></pre>
-          <div id="native-tools" class="native-tools"></div>
         </section>
       </section>
+
+      <!-- Kept non-visible for the existing inspector bridge, which shares this page. -->
+      <div class="legacy-compat" aria-hidden="true">
+        <span id="connection-state">Connecting</span
+        ><button id="rescan" type="button"></button
+        ><input id="enabled" type="checkbox" checked />
+        <span id="page-title"></span><span id="page-url"></span
+        ><span id="webmcp-state"></span><span id="webmcp-methods"></span>
+        <span id="native-count"></span><span id="inferred-count"></span
+        ><span id="adapter-count"></span><span id="blocked-count"></span>
+        <div id="capability-list"></div>
+        <div id="capability-detail"></div>
+        <textarea id="arguments">{}</textarea><span id="invoke-help"></span>
+        <button id="invoke" type="button"></button
+        ><button id="export" type="button"></button>
+        <div id="execution-result"></div>
+        <button id="graph-toggle" type="button"></button>
+        <pre id="graph-json"></pre>
+        <div id="native-tools"></div>
+        <input id="studio-domain" /><input id="studio-outcome" /><select
+          id="studio-session"
+        >
+          <option value="public">Public</option>
+        </select>
+        <button id="studio-new" type="button"></button
+        ><button id="studio-import" type="button"></button
+        ><input id="studio-import-file" type="file" /><button
+          id="studio-export"
+          type="button"
+        ></button>
+        <form id="studio-project-form"></form>
+        <button id="studio-add-tool" type="button"></button>
+        <div id="studio-tool-list"></div>
+        <span id="studio-canvas-title"></span>
+        <div id="studio-flow"></div>
+        <div id="studio-node-inspector"></div>
+        <button id="studio-discover" type="button"></button
+        ><button id="studio-test" type="button"></button
+        ><button id="studio-approve" type="button"></button
+        ><span id="studio-approval"></span
+        ><button id="studio-refresh-requests" type="button"></button>
+        <div id="studio-observed-requests"></div>
+        <div id="studio-activity"></div>
+        <button id="studio-undo" type="button"></button>
+      </div>
     </main>
     <script src="./inspector.js"></script>
   </body>

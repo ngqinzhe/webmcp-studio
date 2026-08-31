@@ -4,8 +4,9 @@
   "version": "0.1.0",
   "description": "WebMCP Studio infers meaningful WebMCP tools from the live semantic DOM without changing site source.",
   "minimum_chrome_version": "120",
-  "permissions": ["activeTab", "scripting"],
+  "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
   "background": { "service_worker": "service-worker.js", "type": "module" },
   "action": { "default_title": "Inspect WebMCP capabilities" },
   "content_scripts": [

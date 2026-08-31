@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Compatibility host · Demo</title>
+    <link rel="stylesheet" href="/assets/demo.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">← Demos</a><strong>Extension WebMCP host</strong>
+    </header>
+    <main>
+      <section class="panel">
+        <h1>Search without native WebMCP</h1>
+        <p class="lede">
+          This fixture deliberately does not define a page model context. The
+          extension must provide the WebMCP host.
+        </p>
+        <form id="compat-search" aria-label="Search products">
+          <label for="compat-query"
+            >Search products<input
+              id="compat-query"
+              name="q"
+              type="search"
+              required
+          /></label>
+          <button type="submit">Search products</button>
+        </form>
+        <form id="compat-sort" aria-label="Sort products">
+          <label for="compat-sort-order"
+            >Sort order<select id="compat-sort-order" name="sort">
+              <option value="relevance">Relevance</option>
+              <option value="price-low">Price: low to high</option>
+            </select></label
+          ><button type="submit">Apply sort</button>
+        </form>
+        <p id="compat-status" class="status" aria-live="polite">
+          Waiting for a search.
+        </p>
+        <a href="javascript:alert('unsafe')">Tracking-only unsafe link</a>
+        <input type="file" aria-label="Upload local file" />
+      </section>
+    </main>
+    <script>
+      window.webmcpInvocationLog = [];
+      window.addEventListener("webmcp-studio:tool-invoked", function (event) {
+        const detail = event && event.detail;
+        if (detail && typeof detail.name === "string")
+          window.webmcpInvocationLog.push(detail.name);
+      });
+      document
+        .querySelector("#compat-search")
+        .addEventListener("submit", function (event) {
+          event.preventDefault();
+          const query = new FormData(event.currentTarget).get("q");
+          document.querySelector("#compat-status").textContent =
+            "Search completed for " + query + ".";
+        });
+      document
+        .querySelector("#compat-sort")
+        .addEventListener("submit", function (event) {
+          event.preventDefault();
+          const sort = new FormData(event.currentTarget).get("sort");
+          document.querySelector("#compat-status").textContent =
+            "Sorted products by " + sort + ".";
+        });
+    </script>
+  </body>
+</html>

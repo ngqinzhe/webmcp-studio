@@ -5,6 +5,10 @@ export default defineConfig({
   timeout: 30_000,
   expect: { timeout: 5_000 },
   fullyParallel: true,
+  // Each test launches a headed persistent Chromium context with an MV3
+  // service worker. Serializing these contexts keeps Chrome's extension
+  // worker/tab pairing deterministic under repeated CI runs.
+  workers: 1,
   use: {
     browserName: "chromium",
     ...devices["Desktop Chrome"],

@@ -18,6 +18,7 @@ import type {
   WebMcpToolAnnotations,
   WebMcpToolDescriptor,
 } from "../../core/compiler";
+import { markExtensionToolRegistration } from "./model-context";
 import type {
   Capability,
   ExecutionFailureCode,
@@ -43,6 +44,7 @@ const MODEL_CONTEXT_METHODS = [
   "getTools",
   "listTools",
   "getToolDefinitions",
+  "executeTool",
 ] as const;
 
 const SINGLE_REGISTER_METHODS = ["provideTool", "registerTool"] as const;
@@ -183,6 +185,28 @@ function isCapabilityList(value: unknown): value is Capability[] {
   return Array.isArray(value) && value.every(isCapabilityForBridge);
 }
 
+function isToolDescriptor(value: unknown): value is WebMcpToolDescriptor {
+  return (
+    isRecord(value) &&
+    typeof value.capabilityId === "string" &&
+    value.capabilityId.trim().length > 0 &&
+    typeof value.name === "string" &&
+    value.name.trim().length > 0 &&
+    typeof value.description === "string" &&
+    isRecord(value.inputSchema) &&
+    isRecord(value.annotations) &&
+    (value.kind === undefined ||
+      value.kind === "capability" ||
+      value.kind === "workflow") &&
+    (value.projectId === undefined || typeof value.projectId === "string") &&
+    (value.toolId === undefined || typeof value.toolId === "string")
+  );
+}
+
+function isToolDescriptorList(value: unknown): value is WebMcpToolDescriptor[] {
+  return Array.isArray(value) && value.every(isToolDescriptor);
+}
+
 function isBridgeResponse(value: unknown): value is BridgeResponse {
   if (!isRecord(value)) return false;
   return (
@@ -236,7 +260,12 @@ function isExecutionFailureCode(value: unknown): value is ExecutionFailureCode {
     value === "execution_timeout" ||
     value === "unsupported_control" ||
     value === "invalid_arguments" ||
-    value === "registration_rejected"
+    value === "registration_rejected" ||
+    value === "approval_required" ||
+    value === "scope_blocked" ||
+    value === "session_expired" ||
+    value === "cancelled" ||
+    value === "ambiguous_delivery"
   );
 }
 
@@ -437,9 +466,10 @@ export class MainWorldWebMcpRuntime {
     capabilities: readonly Capability[],
     enabled = true,
     nativeTools?: readonly NativeToolSummary[],
+    workflowTools?: readonly WebMcpToolDescriptor[],
   ): Promise<WebMcpStatus> {
     return this.enqueue(() =>
-      this.synchronize(capabilities, enabled, nativeTools),
+      this.synchronize(capabilities, enabled, nativeTools, workflowTools),
     );
   }
 
@@ -451,8 +481,14 @@ export class MainWorldWebMcpRuntime {
     capabilities: readonly Capability[],
     enabled = true,
     nativeTools?: readonly NativeToolSummary[],
+    workflowTools?: readonly WebMcpToolDescriptor[],
   ): Promise<WebMcpStatus> {
-    return this.syncCapabilities(capabilities, enabled, nativeTools);
+    return this.syncCapabilities(
+      capabilities,
+      enabled,
+      nativeTools,
+      workflowTools,
+    );
   }
 
   public handleBridgeMessage(event: MessageEvent<unknown>): Promise<void> {
@@ -494,7 +530,9 @@ export class MainWorldWebMcpRuntime {
       case "sync-tools":
         if (
           typeof value.payload.enabled !== "boolean" ||
-          !isCapabilityList(value.payload.capabilities)
+          !isCapabilityList(value.payload.capabilities) ||
+          (value.payload.workflowTools !== undefined &&
+            !isToolDescriptorList(value.payload.workflowTools))
         ) {
           this.postResponse(value.messageId, {
             type: "error",
@@ -506,6 +544,8 @@ export class MainWorldWebMcpRuntime {
           const status = await this.syncCapabilities(
             value.payload.capabilities,
             value.payload.enabled,
+            undefined,
+            value.payload.workflowTools,
           );
           this.postResponse(value.messageId, { type: "registration", status });
         } catch (error) {
@@ -847,6 +887,7 @@ export class MainWorldWebMcpRuntime {
     capabilities: readonly Capability[],
     enabled: boolean,
     nativeToolsOverride?: readonly NativeToolSummary[],
+    workflowTools?: readonly WebMcpToolDescriptor[],
   ): Promise<WebMcpStatus> {
     const context = this.readModelContext();
     this.selectContext(context);
@@ -870,11 +911,47 @@ export class MainWorldWebMcpRuntime {
     const compilation = enabled
       ? compileCapabilitiesWithDiagnostics(capabilities, { nativeTools })
       : { tools: [], skipped: [] };
-    this.desired = new Map(
+    const desired = new Map(
       compilation.tools.map((descriptor) => [descriptor.name, descriptor]),
     );
+    const nativeNames = new Set(
+      nativeTools.map((tool) => tool.name.trim().toLowerCase()),
+    );
+    const workflowRejected = new Set<string>();
+    for (const descriptor of workflowTools ?? []) {
+      const name = descriptor.name.trim();
+      const normalized = name.toLowerCase();
+      if (
+        !name ||
+        nativeNames.has(normalized) ||
+        [...desired.keys()].some(
+          (candidate) => candidate.toLowerCase() === normalized,
+        )
+      ) {
+        workflowRejected.add(name || descriptor.capabilityId);
+        this.rejected.set(
+          name || descriptor.capabilityId,
+          nativeNames.has(normalized)
+            ? "A native WebMCP tool already owns this name."
+            : "Another registered tool already owns this name.",
+        );
+        continue;
+      }
+      desired.set(name, {
+        ...descriptor,
+        name,
+        description: descriptor.description.trim() || "Project workflow tool.",
+        inputSchema: cloneJsonSchema(descriptor.inputSchema),
+        annotations: { ...descriptor.annotations },
+      });
+    }
+    this.desired = desired;
     for (const name of this.rejected.keys()) {
-      if (!this.desired.has(name) && !this.registered.has(name)) {
+      if (
+        !this.desired.has(name) &&
+        !this.registered.has(name) &&
+        !workflowRejected.has(name)
+      ) {
         this.rejected.delete(name);
       }
     }
@@ -1197,13 +1274,29 @@ export class MainWorldWebMcpRuntime {
   private createRegistration(
     descriptor: WebMcpToolDescriptor,
   ): WebMcpToolRegistration {
-    return {
+    const registration = markExtensionToolRegistration({
       name: descriptor.name,
       description: descriptor.description,
       inputSchema: cloneJsonSchema(descriptor.inputSchema),
       annotations: { ...descriptor.annotations },
-      execute: (args) => this.invokeCapability(descriptor.capabilityId, args),
-    };
+      execute: (args) => {
+        // This intentionally carries only the public tool name. It gives the
+        // page (and an E2E fixture) an observable signal that the registered
+        // WebMCP handler ran, without exposing invocation arguments or bridge
+        // internals to page code.
+        try {
+          this.pageWindow?.dispatchEvent(
+            new CustomEvent("webmcp-studio:tool-invoked", {
+              detail: { name: descriptor.name },
+            }),
+          );
+        } catch {
+          // A restricted page realm must not prevent the actual invocation.
+        }
+        return this.invokeCapability(descriptor.capabilityId, args);
+      },
+    });
+    return registration;
   }
 
   private currentUrl(): string {

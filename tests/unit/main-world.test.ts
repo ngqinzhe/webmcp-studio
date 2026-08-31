@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createBridgeMessage } from "../../core/bridge-protocol";
+import {
+  ensureModelContext,
+  type ExtensionModelContext,
+  type ModelContextTool,
+} from "../../extension/main-world/model-context";
 import { MainWorldWebMcpRuntime } from "../../extension/main-world/runtime";
 import type {
   Capability,
@@ -48,6 +53,14 @@ function setModelContext(value: unknown): void {
   });
 }
 
+function setNavigatorModelContext(value: unknown): void {
+  Object.defineProperty(navigator, "modelContext", {
+    configurable: true,
+    value,
+    writable: true,
+  });
+}
+
 function message(data: unknown): MessageEvent<unknown> {
   return new MessageEvent("message", { data, source: window });
 }
@@ -72,6 +85,7 @@ function completedResult() {
 describe("MAIN-world WebMCP runtime", () => {
   beforeEach(() => {
     delete (document as Document & { modelContext?: unknown }).modelContext;
+    delete (navigator as Navigator & { modelContext?: unknown }).modelContext;
   });
 
   it("reports an unavailable document model context without throwing", async () => {
@@ -84,6 +98,63 @@ describe("MAIN-world WebMCP runtime", () => {
 
     expect(status.available).toBe(false);
     expect(status.registered).toEqual([]);
+  });
+
+  it("accepts a name and JSON string in the imperative WebMCP fallback", async () => {
+    const context = ensureModelContext(document)
+      .context as ExtensionModelContext;
+    context.clearTools();
+    const execute = vi.fn(async (args: unknown) => args);
+    const tool = {
+      name: "agent_fallback_tool",
+      description: "A test tool.",
+      inputSchema: { type: "object" },
+      annotations: {},
+      execute,
+    } satisfies ModelContextTool;
+
+    expect(context.provideTool(tool)).toBe(true);
+    await expect(
+      context.executeTool(
+        "agent_fallback_tool",
+        JSON.stringify({ query: "keyboard" }),
+      ),
+    ).resolves.toEqual({ query: "keyboard" });
+    expect(execute).toHaveBeenCalledWith({ query: "keyboard" });
+    context.unregisterTool("agent_fallback_tool");
+  });
+
+  it("registers through a native navigator.modelContext host", async () => {
+    const tools = new Map<string, WebMcpToolRegistration>();
+    const context = {
+      provideTool(tool: WebMcpToolRegistration) {
+        tools.set(tool.name, tool);
+      },
+      unregisterTool(name: string) {
+        tools.delete(name);
+      },
+      getTools() {
+        return [];
+      },
+    };
+    setNavigatorModelContext(context);
+
+    const resolution = ensureModelContext(document);
+    expect(resolution.source).toBe("navigator");
+    expect(resolution.owned).toBe(false);
+    expect(
+      (document as Document & { modelContext?: unknown }).modelContext,
+    ).toBe(context);
+
+    const runtime = new MainWorldWebMcpRuntime({
+      window,
+      document,
+      token: TOKEN,
+    });
+    await runtime.syncCapabilities([capability()]);
+
+    expect([...tools.keys()]).toEqual(["search_products"]);
+    expect(runtime.getStatusSnapshot().registered).toEqual(["search_products"]);
   });
 
   it("registers through document.modelContext and bridges tool execution", async () => {
@@ -102,6 +173,12 @@ describe("MAIN-world WebMCP runtime", () => {
     setModelContext(context);
 
     const posts: unknown[] = [];
+    const invocations: string[] = [];
+    const onToolInvoked = (event: Event) => {
+      const detail = (event as CustomEvent<{ name?: unknown }>).detail;
+      if (typeof detail?.name === "string") invocations.push(detail.name);
+    };
+    window.addEventListener("webmcp-studio:tool-invoked", onToolInvoked);
     vi.spyOn(window, "postMessage").mockImplementation((data) => {
       posts.push(data);
     });
@@ -122,6 +199,7 @@ describe("MAIN-world WebMCP runtime", () => {
     const registered = tools.get("search_products");
     expect(registered).toBeDefined();
     const execution = registered!.execute({ query: "keyboard" });
+    expect(invocations).toEqual(["search_products"]);
     const invoke = posts.find(
       (value): value is { payload: { type: string; requestId: string } } =>
         typeof value === "object" &&
@@ -147,6 +225,7 @@ describe("MAIN-world WebMCP runtime", () => {
     );
 
     await expect(execution).resolves.toEqual(completedResult());
+    window.removeEventListener("webmcp-studio:tool-invoked", onToolInvoked);
     runtime.stop();
   });
 

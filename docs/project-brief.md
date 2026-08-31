@@ -6,13 +6,15 @@
 
 **Document status:** Consolidated development brief, preserving the recorded product decisions.
 
-**Evidence status:** The repository contains an extension prototype. This brief does not certify completion of the MVP or any native ChatGPT/browser compatibility gate.
+**Evidence status:** The current repository contains the MVP Studio and universal-extension implementation, plus fixture and feasibility artifacts. This brief does not certify completion of any native ChatGPT/browser compatibility gate.
 
-**Latest runtime evidence:** The [August 28 feasibility experiment](feasibility/2026-08-28.md) demonstrated native shared authoring, the existing execution runtime, and registration removal in Codex. The [August 29 Chrome bridge investigation](feasibility/chrome-agent-bridge-2026-08-29.md) then found that the current Chrome provider advertises only `pageAssets`, while the in-app-browser provider advertises `webmcp`, despite successful Chrome-native registration and page-mediated execution. The user clarified that a pasted follow-up was not a ChatGPT Work run. The chosen path is blocked in the current Chrome provider; G1–G3 remain open pending a real independent consumer test, platform confirmation, or an explicit design decision.
+**Latest implementation and runtime evidence:** The current tree implements canonical project editing, discovery and observations, workflow execution, transfer, approval, session-aware activation, and extension lifecycle controls. The [August 28 feasibility experiment](feasibility/2026-08-28.md) demonstrated native shared authoring, the execution runtime, and registration removal in Codex. The [installed-extension follow-up](feasibility/installed-extension-2026-08-29.md) verifies the MV3 registration and page-mediated execution boundary. The [Chrome agent-bridge investigation](feasibility/chrome-agent-bridge-2026-08-29.md) records that the tested agent connection cannot acquire WebMCP: the tested Chrome provider advertises only `pageAssets`, while the in-app-browser provider advertises `webmcp`, despite successful Chrome-native registration and page-mediated execution. The user clarified that a pasted follow-up was not a ChatGPT Work run. The native ChatGPT/browser route and G1–G3 remain open pending a real independent consumer test, platform confirmation, or an explicit design decision.
 
 This is the repository planning reference for the agreed hackathon MVP. Supporting technical evidence is retained in the [Printing Press and discovery research](research/printing-press-discovery.md). The personal conversation transcript and device-handoff files are not part of the repository.
 
-**Relationship to the prototype:** The existing [extension design](superpowers/specs/2026-08-28-webmcp-polyfill-design.md) describes a narrower DOM-inference runtime and inspector. It is an implementation starting point, not the full Studio product. Map its Capability Graph, adapter hooks, and browser API handling to the canonical config, declarative node palette, and G1–G3 below. Mocked WebMCP tests or inspector invocation alone do not establish native ChatGPT compatibility. No code changes or runtime tests were performed as part of importing this brief.
+**Relationship to the implementation:** The existing [extension design](superpowers/specs/2026-08-28-webmcp-polyfill-design.md) describes the narrower DOM-inference runtime and inspector from which the current work started. The current MVP adds canonical projects, revisioned Studio authoring, discovery and observation controls, workflow interpretation, transfer, approval, and session-aware extension execution described below. The [MVP design](superpowers/specs/2026-08-29-webmcp-studio-mvp-design.md) records the current product contract. Mocked WebMCP tests or inspector invocation alone do not establish native ChatGPT compatibility.
+
+**Current discovery-first surface (August 30, 2026):** The extension action opens Studio for the exact selected tab, injects the page adapter, and starts discovery automatically. Studio presents the discovered domain as read-only, lists discovered actions, and lets a user drag actions into an ordered flow. Naming the flow and choosing **Save & inject** creates an approved workflow registration on the current page's `document.modelContext`; a WebMCP consumer can discover it with `getTools()` and invoke its `execute` handler. The simplified surface omits the legacy project/import/export, inspector, graph, activity, and approval panels; runtime validation and approval checks remain enforced behind the single explicit injection action. The repeated headed E2E suite verifies two composed flows and page-side invocation markers. This is synthetic extension/browser evidence, not proof of the native ChatGPT connection gate.
 
 **The first technical gate is the complete ChatGPT/browser connection:** native Studio WebMCP calls, a supported connection to our extension and the exact user-selected local tab, and native ChatGPT invocation of extension-injected target-site tools. The current Codex external-Chrome provider does not advertise `webmcp`, so the complete path cannot proceed through that provider. ChatGPT and local-tab discovery are settled choices. A real independent supported consumer test or platform confirmation remains necessary; an architectural workaround requires an explicit design or scope decision, not an unannounced replacement agent, hosted inference service, or relay.
 
@@ -42,7 +44,7 @@ The researched Printing Press workflow already produces CLI and MCP outputs. Its
 
 ## 2. Approved MVP scope
 
-These are the agreed product decisions consolidated on August 28. They define target scope, not the current prototype's implementation coverage.
+These are the agreed product decisions consolidated on August 28. They remain the product scope; current implementation coverage and browser evidence are tracked in the README and feasibility reports.
 
 | Area               | Settled decision                                                                                                                                                                                                                                        |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -274,7 +276,7 @@ Pin the actual API behavior behind a small compatibility adapter. Chrome's guide
 
 ### Required proof
 
-**All gates below are pending in the supplied record. None was executed during document consolidation.**
+**G1–G3 native compatibility and G4–G6 product/submission evidence remain open in the supplied record.** Local unit/E2E checks and installed-extension diagnostics validate implementation components, but do not close these gates.
 
 | Gate                                | Evidence needed to close it                                                                                                                                                                                            | If evidence is missing or the test fails                                                                                                                                 |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -290,6 +292,8 @@ Close G1–G3 in one coherent supported setup before treating the core architect
 ## 10. Build plan and team handover
 
 Two builders will use AI assistance and allocate work internally. The user's available build window ends around **Saturday, August 29 afternoon SGT**, with vacation on **Sunday, August 30**. The teammate has further availability, but exact hours are unspecified. Do not plan on two full-time builders through submission or depend on the user returning for last-minute work.
+
+This is a handover plan, not a current implementation status report. The repository now contains the shared contracts, Studio, and extension execution pieces; browser proof, judge access, and reproducible submission evidence remain open.
 
 ### Recommended work packages
 
@@ -329,7 +333,7 @@ The first flow is an integration milestone, not permission to cut agreed functio
 
 ## 11. Acceptance and evidence
 
-**Status: all scenarios are pending.** This section defines what to demonstrate and check; it does not report test results. Each result should identify the tested build, config revision, browser/account context, observed behavior, and retained sanitized evidence. Record failures and limitations alongside successes.
+**Status: native/product acceptance evidence remains open.** Local implementation checks cover selected mechanics, but this section defines the evidence needed to close each scenario. Each result should identify the tested build, config revision, browser/account context, observed behavior, and retained sanitized evidence. Record failures and limitations alongside successes.
 
 ### Approved-scope acceptance scenarios
 
@@ -445,6 +449,6 @@ This brief was consolidated on August 28, 2026 from the supplied project draft, 
 
 Later decisions established optional authenticated discovery, sole local-tab discovery, a tool list with owned flows, automatic draft suggestions, internal team work allocation, and external ChatGPT. Earlier hosted-agent, managed-browser, public-only, and person-by-module proposals are superseded.
 
-The [research notes](research/printing-press-discovery.md) retain pinned Printing Press evidence and explicitly historical alternatives. Product scope follows this brief; the [extension prototype design](superpowers/specs/2026-08-28-webmcp-polyfill-design.md) describes the starting implementation. Official links adjacent to relevant claims distinguish documented capabilities from required runtime proof.
+The [research notes](research/printing-press-discovery.md) retain pinned Printing Press evidence and explicitly historical alternatives. Product scope follows this brief; the [extension prototype design](superpowers/specs/2026-08-28-webmcp-polyfill-design.md) describes the starting implementation, and the [MVP design](superpowers/specs/2026-08-29-webmcp-studio-mvp-design.md) describes the current implementation contract. Official links adjacent to relevant claims distinguish documented capabilities from required runtime proof.
 
-**Document completion does not close G1–G6. The next build priority is the G1–G3 browser proof, followed by one complete, reproducible product journey.**
+**The MVP implementation is present, but document completion does not close G1–G6. The next priority is the G1–G3 browser proof, followed by one complete, reproducible product journey.**

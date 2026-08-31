@@ -185,7 +185,12 @@ export type ExecutionFailureCode =
   | "execution_timeout"
   | "unsupported_control"
   | "invalid_arguments"
-  | "registration_rejected";
+  | "registration_rejected"
+  | "approval_required"
+  | "scope_blocked"
+  | "session_expired"
+  | "cancelled"
+  | "ambiguous_delivery";
 
 export interface ExecutionError {
   code: ExecutionFailureCode;
@@ -225,6 +230,19 @@ export interface InspectorState {
   webmcp: WebMcpStatus;
   lastExecution: { capabilityId: string; result: ExecutionResult } | null;
   enabled: boolean;
+  /** Changes when a new content-document runtime starts. */
+  runtimeGeneration?: string;
+  /** Approved imported snapshot currently registered on this exact tab. */
+  activeProject?: {
+    projectId: string;
+    revision: number;
+    snapshotHash: string;
+    tabId: number;
+    origin: string;
+    runtimeGeneration: string;
+    approved: boolean;
+    toolNames: string[];
+  } | null;
   updatedAt: number;
 }
 
