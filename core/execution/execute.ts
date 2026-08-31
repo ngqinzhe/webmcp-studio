@@ -36,6 +36,7 @@ import {
   snapshotPage,
   type ExecutionSnapshot,
 } from "./snapshot";
+import { isSafeHttpDestination } from "../project";
 
 export interface ExecutionOptions {
   document?: Document;
@@ -45,6 +46,10 @@ export interface ExecutionOptions {
   timeoutMs?: number;
   /** Polling/settling cadence. It is never used as an unbounded sleep. */
   settleMs?: number;
+  /** Optional exact origins permitted for link navigation. */
+  allowedNavigationOrigins?: readonly string[];
+  /** Controlled fixtures may opt into local navigation explicitly. */
+  allowPrivateNetwork?: boolean;
 }
 
 interface OperationError {
@@ -59,8 +64,97 @@ interface WaitOutcome {
   timedOut: boolean;
 }
 
+const REDACTED_VALUE = "[REDACTED]";
+const SENSITIVE_MARKER = /password|token|secret|csrf/i;
+const SENSITIVE_AUTOCOMPLETE_VALUES = new Set([
+  "current-password",
+  "new-password",
+]);
+const SENSITIVE_METADATA_ATTRIBUTES = new Set([
+  "id",
+  "name",
+  "type",
+  "autocomplete",
+  "aria-label",
+  "aria-labelledby",
+  "placeholder",
+  "title",
+  "class",
+  "data-testid",
+]);
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function containsSensitiveMarker(value: string): boolean {
+  return SENSITIVE_MARKER.test(value);
+}
+
+function sanitizeString(value: string): string {
+  return containsSensitiveMarker(value) ? REDACTED_VALUE : value;
+}
+
+function sanitizeJsonValue(value: JsonValue, key?: string): JsonValue {
+  if (key && containsSensitiveMarker(key)) return REDACTED_VALUE;
+  if (typeof value === "string") return sanitizeString(value);
+  if (Array.isArray(value)) return value.map((item) => sanitizeJsonValue(item));
+  if (value !== null && typeof value === "object") {
+    const sanitized: Record<string, JsonValue> = {};
+    for (const [key, item] of Object.entries(value)) {
+      sanitized[key] = sanitizeJsonValue(item, key);
+    }
+    return sanitized;
+  }
+  return value;
+}
+
+function sanitizeDetails(
+  details: Record<string, JsonValue>,
+): Record<string, JsonValue> {
+  const sanitized: Record<string, JsonValue> = {};
+  for (const [key, value] of Object.entries(details)) {
+    sanitized[key] = sanitizeJsonValue(value, key);
+  }
+  return sanitized;
+}
+
+function isSensitiveReadTarget(document: Document, element: Element): boolean {
+  const tagName = element.localName.toLowerCase();
+  const inputType = (element.getAttribute("type") ?? "text").toLowerCase();
+  if (tagName === "input" && inputType === "password") return true;
+
+  const autocomplete = element.getAttribute("autocomplete");
+  if (
+    autocomplete
+      ?.toLowerCase()
+      .split(/\s+/)
+      .some((value) => SENSITIVE_AUTOCOMPLETE_VALUES.has(value))
+  ) {
+    return true;
+  }
+
+  for (const attribute of Array.from(element.attributes)) {
+    if (
+      containsSensitiveMarker(attribute.name) ||
+      (SENSITIVE_METADATA_ATTRIBUTES.has(attribute.name.toLowerCase()) &&
+        containsSensitiveMarker(attribute.value))
+    ) {
+      return true;
+    }
+  }
+
+  const role = getSemanticRole(element);
+  const isFormControl =
+    tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select" ||
+    role === "textbox" ||
+    role === "combobox" ||
+    role === "listbox";
+  return isFormControl
+    ? containsSensitiveMarker(getAccessibleName(document, element))
+    : false;
 }
 
 function getDocument(options: ExecutionOptions): Document | null {
@@ -129,18 +223,19 @@ function failureResult(
   const result: ExecutionResult = {
     success: false,
     status: error.code,
-    urlBefore: before.url,
-    urlAfter: after.url,
+    urlBefore: sanitizeString(before.url),
+    urlAfter: sanitizeString(after.url),
     navigationOccurred: navigationOccurred(before, after),
     stateChanged: observableStateChanged(before, after),
-    warnings,
+    warnings: warnings.map(sanitizeString),
     error: {
       code: error.code,
-      message: error.message,
+      message: sanitizeString(error.message),
     },
   };
-  if (matchedTarget) result.matchedTarget = matchedTarget;
-  if (error.details) (result.error as ExecutionError).details = error.details;
+  if (matchedTarget) result.matchedTarget = sanitizeString(matchedTarget);
+  if (error.details)
+    (result.error as ExecutionError).details = sanitizeDetails(error.details);
   return result;
 }
 
@@ -154,14 +249,14 @@ function completedResult(
   const result: ExecutionResult = {
     success: true,
     status: "completed",
-    urlBefore: before.url,
-    urlAfter: after.url,
+    urlBefore: sanitizeString(before.url),
+    urlAfter: sanitizeString(after.url),
     navigationOccurred: navigationOccurred(before, after),
     stateChanged: observableStateChanged(before, after),
-    warnings,
+    warnings: warnings.map(sanitizeString),
   };
-  if (matchedTarget) result.matchedTarget = matchedTarget;
-  if (resultValue !== undefined) result.result = resultValue;
+  if (matchedTarget) result.matchedTarget = sanitizeString(matchedTarget);
+  if (resultValue !== undefined) result.result = sanitizeJsonValue(resultValue);
   return result;
 }
 
@@ -666,7 +761,7 @@ async function executeControl(
   return completedResult(
     before,
     outcome.after,
-    controlResultValue(target.element),
+    controlResultValue(document, target.element),
     target.description,
   );
 }
@@ -677,18 +772,21 @@ function formControlKind(
   return controlKind(element);
 }
 
-function controlResultValue(element: Element): JsonValue {
+function controlResultValue(document: Document, element: Element): JsonValue {
   const kind = controlKind(element);
+  const sensitive = isSensitiveReadTarget(document, element);
   if (kind === "checkbox" || kind === "radio") {
     return { checked: readChecked(element) };
   }
   if (kind === "select") {
     return {
-      value: readControlValue(element),
-      selectedValues: readSelectedValues(element),
+      value: sensitive ? REDACTED_VALUE : readControlValue(element),
+      selectedValues: sensitive
+        ? [REDACTED_VALUE]
+        : readSelectedValues(element),
     };
   }
-  return { value: readControlValue(element) };
+  return { value: sensitive ? REDACTED_VALUE : readControlValue(element) };
 }
 
 async function executeForm(
@@ -941,6 +1039,38 @@ async function executeAction(
       target.description,
     );
   }
+  if (executor.action === "navigate") {
+    const href = target.element.getAttribute("href");
+    if (href !== null) {
+      let destination: string;
+      try {
+        destination = new URL(href, options.urlProvider?.() || document.baseURI)
+          .href;
+      } catch {
+        destination = "";
+      }
+      if (
+        !isSafeHttpDestination(destination, {
+          ...(options.allowedNavigationOrigins === undefined
+            ? {}
+            : { allowedOrigins: options.allowedNavigationOrigins }),
+          ...(options.allowPrivateNetwork === undefined
+            ? {}
+            : { allowPrivateNetwork: options.allowPrivateNetwork }),
+        })
+      )
+        return failureResult(
+          before,
+          snapshotPage(document, options.urlProvider),
+          {
+            code: "cross_origin_blocked",
+            message:
+              "The navigation destination is outside the approved web scope.",
+          },
+          target.description,
+        );
+    }
+  }
 
   const click = callNativeMethod(target.element, "click");
   if (!click.ok) {
@@ -960,6 +1090,26 @@ async function executeAction(
   if (!outcome.satisfied) {
     return outcomeFailure(before, outcome, expected, target.description, []);
   }
+  if (
+    executor.action === "navigate" &&
+    !isSafeHttpDestination(outcome.after.url, {
+      ...(options.allowedNavigationOrigins === undefined
+        ? {}
+        : { allowedOrigins: options.allowedNavigationOrigins }),
+      ...(options.allowPrivateNetwork === undefined
+        ? {}
+        : { allowPrivateNetwork: options.allowPrivateNetwork }),
+    })
+  )
+    return failureResult(
+      before,
+      outcome.after,
+      {
+        code: "cross_origin_blocked",
+        message: "The resulting navigation is outside the approved web scope.",
+      },
+      target.description,
+    );
   return completedResult(
     before,
     outcome.after,
@@ -984,7 +1134,7 @@ function readTargetResult(document: Document, element: Element): JsonValue {
   if (kind === "select") value.selectedValues = readSelectedValues(element);
   const href = element.getAttribute("href");
   if (href !== null) value.href = href;
-  return value;
+  return sanitizeJsonValue(value);
 }
 
 async function executeRead(
@@ -999,6 +1149,17 @@ async function executeRead(
       before,
       snapshotPage(document, options.urlProvider),
       target.error,
+    );
+  }
+  if (isSensitiveReadTarget(document, target.element)) {
+    return failureResult(
+      before,
+      snapshotPage(document, options.urlProvider),
+      {
+        code: "unsupported_control",
+        message: "Sensitive DOM reads are blocked.",
+      },
+      target.description,
     );
   }
   if (!isVisibleElement(target.element)) {

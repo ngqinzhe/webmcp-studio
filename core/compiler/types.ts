@@ -1,4 +1,5 @@
 import type { Capability, JSONSchema, NativeToolSummary } from "../types";
+import type { SessionSnapshot, ToolAccess } from "../project/types";
 
 /**
  * The subset of MCP annotations that is useful to a browser-native tool
@@ -23,6 +24,12 @@ export interface WebMcpToolDescriptor {
   description: string;
   inputSchema: JSONSchema;
   annotations: WebMcpToolAnnotations;
+  /** Identifies descriptors backed by an approved project workflow. */
+  kind?: "capability" | "workflow";
+  projectId?: string;
+  toolId?: string;
+  access?: ToolAccess;
+  available?: boolean;
 }
 
 /** Spelling alias for consumers that use the all-caps acronym. */
@@ -34,6 +41,13 @@ export interface CompilerOptions {
   nativeTools?: Iterable<NativeToolInput>;
   nativeToolNames?: Iterable<string>;
   includeDisabled?: boolean;
+}
+
+export interface ProjectToolCompilerOptions {
+  /** Omit protected tools unless this ephemeral tab session is verified. */
+  session?: SessionSnapshot;
+  /** Useful for UI previews; unavailable tools are never executable descriptors. */
+  includeUnavailable?: boolean;
 }
 
 export type CompilationSkipReason =

@@ -1,0 +1,1010 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#eef3f5" />
+    <title>Northstar Routes · Controlled travel target</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1c2a32;
+        --muted: #687780;
+        --faint: #8a989e;
+        --line: #d8e1e5;
+        --surface: #ffffff;
+        --canvas: #eef3f5;
+        --blue: #397d9e;
+        --blue-soft: #e0edf3;
+        --coral: #c96e5a;
+        --yellow: #ae812c;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-width: 280px;
+        color: var(--ink);
+        background: var(--canvas);
+      }
+      button,
+      input {
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      .site {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 18px 20px 28px;
+      }
+      .masthead {
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: 16px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      .eyebrow {
+        margin: 0 0 5px;
+        color: var(--blue);
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font:
+          400 clamp(26px, 5vw, 38px)/0.98 Georgia,
+          "Times New Roman",
+          serif;
+        letter-spacing: -0.045em;
+      }
+      .subtitle {
+        max-width: 420px;
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.5;
+      }
+      .trip {
+        display: grid;
+        justify-items: end;
+        gap: 3px;
+        min-width: 96px;
+        padding: 8px 10px;
+        border: 1px solid #b8d3df;
+        border-radius: 9px;
+        color: var(--blue);
+        background: var(--blue-soft);
+      }
+      .trip strong {
+        font-size: 12px;
+        line-height: 1.1;
+      }
+      .trip span {
+        font-size: 8px;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+      .native-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin: 14px 0;
+        padding: 8px 10px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.58);
+        font-size: 9px;
+      }
+      .native-row strong {
+        color: var(--ink);
+        font-size: 9px;
+      }
+      .native-status {
+        color: var(--yellow);
+        font-weight: 750;
+        text-align: right;
+      }
+      .native-status.is-live {
+        color: var(--blue);
+      }
+      .controls {
+        display: grid;
+        grid-template-columns: 1fr 1fr 145px auto;
+        gap: 8px;
+        margin-bottom: 15px;
+      }
+      label {
+        display: grid;
+        gap: 5px;
+        color: var(--muted);
+        font-size: 9px;
+        font-weight: 750;
+      }
+      input {
+        width: 100%;
+        min-width: 0;
+        padding: 9px 10px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        outline: none;
+        color: var(--ink);
+        background: var(--surface);
+        font-size: 11px;
+      }
+      input:focus {
+        border-color: var(--blue);
+        box-shadow: 0 0 0 3px rgba(57, 125, 158, 0.1);
+      }
+      .button {
+        align-self: end;
+        min-height: 36px;
+        padding: 8px 12px;
+        border: 1px solid var(--blue);
+        border-radius: 7px;
+        color: #fff;
+        background: var(--blue);
+        font-size: 10px;
+        font-weight: 800;
+      }
+      .button:hover {
+        background: #2e6885;
+      }
+      .status {
+        min-height: 17px;
+        margin: 0 0 12px;
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .status.is-error {
+        color: var(--coral);
+      }
+      .status.is-success {
+        color: var(--blue);
+      }
+      .section-heading {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 8px;
+      }
+      h2 {
+        font-size: 13px;
+        letter-spacing: -0.02em;
+      }
+      .section-heading span {
+        color: var(--faint);
+        font-size: 9px;
+      }
+      .flights {
+        display: grid;
+        gap: 9px;
+      }
+      .flight {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        padding: 11px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: var(--surface);
+        transition:
+          border-color 0.18s ease,
+          box-shadow 0.18s ease;
+      }
+      .flight.is-selected {
+        border-color: #8dbbd0;
+        box-shadow: 0 0 0 3px rgba(57, 125, 158, 0.08);
+      }
+      .route {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--ink);
+        font-size: 13px;
+        font-weight: 800;
+      }
+      .route-arrow {
+        color: var(--blue);
+        font-size: 13px;
+      }
+      .flight-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 8px;
+      }
+      .flight-airline {
+        color: var(--blue);
+        font-size: 8px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .flight-side {
+        display: grid;
+        justify-items: end;
+        gap: 6px;
+      }
+      .flight-price {
+        color: var(--ink);
+        font-size: 14px;
+        font-weight: 800;
+      }
+      .flight-side button {
+        min-height: 28px;
+        padding: 5px 8px;
+        border: 1px solid #b8d3df;
+        border-radius: 6px;
+        color: var(--blue);
+        background: var(--blue-soft);
+        font-size: 9px;
+        font-weight: 750;
+      }
+      .empty {
+        padding: 28px 12px;
+        border: 1px dashed var(--line);
+        border-radius: 9px;
+        color: var(--faint);
+        text-align: center;
+        font-size: 10px;
+      }
+      .details {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: start;
+        margin-top: 14px;
+        padding: 11px;
+        border: 1px solid #ddd4bc;
+        border-radius: 9px;
+        background: #fffaf0;
+      }
+      .details[hidden] {
+        display: none;
+      }
+      .details .eyebrow {
+        color: var(--yellow);
+      }
+      .details h2 {
+        font-size: 14px;
+      }
+      .details p {
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 9px;
+        line-height: 1.45;
+      }
+      .details-price {
+        color: var(--yellow);
+        font-size: 15px;
+        font-weight: 800;
+      }
+      .footnote {
+        margin-top: 16px;
+        color: var(--faint);
+        font-size: 8px;
+        line-height: 1.5;
+      }
+      @media (max-width: 560px) {
+        .site {
+          padding: 14px 13px 22px;
+        }
+        .controls {
+          grid-template-columns: 1fr 1fr;
+        }
+        .controls label:last-of-type {
+          grid-column: 1 / -1;
+        }
+        .controls .button {
+          grid-column: 1 / -1;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="site">
+      <header class="masthead">
+        <div>
+          <p class="eyebrow">Controlled travel target</p>
+          <h1>Northstar Routes</h1>
+          <p class="subtitle">
+            A deterministic itinerary search for demonstrating composable
+            page-native tools. No booking, payment, or external travel request
+            occurs here.
+          </p>
+        </div>
+        <div class="trip" aria-label="Selected itinerary">
+          <strong id="trip-status">No flight</strong>
+          <span>selected</span>
+        </div>
+      </header>
+
+      <div class="native-row">
+        <strong>WebMCP target status</strong>
+        <span id="native-status" class="native-status"
+          >Checking browser API…</span
+        >
+      </div>
+
+      <form
+        id="search-form"
+        class="controls"
+        aria-label="Search and filter flights"
+      >
+        <label
+          >From
+          <input id="origin" name="origin" value="Singapore" maxlength="40" />
+        </label>
+        <label
+          >To
+          <input
+            id="destination"
+            name="destination"
+            value="Tokyo"
+            maxlength="40"
+          />
+        </label>
+        <label
+          >Max fare (USD)
+          <input
+            id="max-price"
+            name="maxPrice"
+            type="number"
+            min="0"
+            max="10000"
+            step="1"
+            value="700"
+          />
+        </label>
+        <button class="button" type="submit">Search routes</button>
+      </form>
+      <p id="status" class="status" role="status" aria-live="polite">
+        Ready for a page-native route search.
+      </p>
+
+      <section aria-labelledby="flights-title">
+        <div class="section-heading">
+          <h2 id="flights-title">Available routes</h2>
+          <span id="result-count">4 available</span>
+        </div>
+        <div id="flights" class="flights"></div>
+      </section>
+
+      <section id="details" class="details" aria-live="polite" hidden>
+        <div>
+          <p class="eyebrow">Selected itinerary</p>
+          <h2 id="details-route"></h2>
+          <p id="details-description"></p>
+        </div>
+        <strong id="details-price" class="details-price"></strong>
+      </section>
+
+      <p class="footnote">
+        The Studio parent receives only tool names, schemas, evidence, and
+        structured results. Itinerary state stays inside this controlled target.
+      </p>
+    </main>
+
+    <script>
+      (() => {
+        "use strict";
+
+        const CHANNEL = "webmcp-studio-target";
+        const VERSION = 1;
+        const TARGET_ID = "travel";
+        const flights = [
+          {
+            id: "ns-sin-tyo-201",
+            airline: "Northstar Air",
+            origin: "Singapore",
+            destination: "Tokyo",
+            date: "2026-10-15",
+            departure: "08:10",
+            arrival: "15:20",
+            duration: "7h 10m",
+            cabin: "economy",
+            price: 420,
+            stops: 0,
+          },
+          {
+            id: "ns-sin-tyo-305",
+            airline: "Northstar Air",
+            origin: "Singapore",
+            destination: "Tokyo",
+            date: "2026-10-15",
+            departure: "13:45",
+            arrival: "21:10",
+            duration: "7h 25m",
+            cabin: "economy",
+            price: 580,
+            stops: 0,
+          },
+          {
+            id: "ns-sin-sel-411",
+            airline: "Northstar Air",
+            origin: "Singapore",
+            destination: "Seoul",
+            date: "2026-10-16",
+            departure: "09:20",
+            arrival: "17:00",
+            duration: "6h 40m",
+            cabin: "economy",
+            price: 390,
+            stops: 0,
+          },
+          {
+            id: "ns-sin-tyo-512",
+            airline: "Northstar Air",
+            origin: "Singapore",
+            destination: "Tokyo",
+            date: "2026-10-15",
+            departure: "22:15",
+            arrival: "06:00",
+            duration: "7h 45m",
+            cabin: "premium",
+            price: 760,
+            stops: 0,
+          },
+        ];
+        const state = {
+          origin: "",
+          destination: "",
+          visibleIds: flights.map((flight) => flight.id),
+          selectedId: null,
+          lastMessage: "Ready for a page-native route search.",
+        };
+
+        const byId = (id) => document.getElementById(id);
+        const context = document.modelContext;
+        const registered = new Map();
+        let nativeAvailable = false;
+        let registeredNames = [];
+        let rejectedNames = [];
+
+        const toolDefinitions = [
+          {
+            name: "search_flights",
+            description:
+              "Search the controlled Northstar route catalog by origin and destination.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                origin: { type: "string", minLength: 1, maxLength: 40 },
+                destination: { type: "string", minLength: 1, maxLength: 40 },
+              },
+              required: ["origin", "destination"],
+              additionalProperties: false,
+            },
+            annotations: { readOnlyHint: true },
+            effect: "read",
+            evidence: "Origin and destination route search fields",
+          },
+          {
+            name: "filter_flights",
+            description:
+              "Filter searched routes by maximum fare and choose the fastest matching itinerary.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                flightIds: {
+                  type: "array",
+                  items: { type: "string" },
+                  maxItems: 20,
+                },
+                maxPrice: { type: "number", minimum: 0, maximum: 10000 },
+                cabin: { type: "string", enum: ["economy", "premium"] },
+              },
+              required: ["maxPrice"],
+              additionalProperties: false,
+            },
+            annotations: { readOnlyHint: true },
+            effect: "read",
+            evidence: "Fare control and itinerary result list",
+          },
+          {
+            name: "get_flight_details",
+            description:
+              "Read details for one route in the current controlled itinerary catalog.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                flightId: { type: "string", minLength: 1, maxLength: 100 },
+              },
+              required: ["flightId"],
+              additionalProperties: false,
+            },
+            annotations: { readOnlyHint: true },
+            effect: "read",
+            evidence: "Itinerary details action",
+          },
+          {
+            name: "select_flight",
+            description:
+              "Select one route in the controlled itinerary; this does not book or purchase a ticket.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                flightId: { type: "string", minLength: 1, maxLength: 100 },
+              },
+              required: ["flightId"],
+              additionalProperties: false,
+            },
+            annotations: { readOnlyHint: false },
+            effect: "interact",
+            evidence: "Select itinerary button and selected-route panel",
+          },
+        ];
+
+        function isRecord(value) {
+          return (
+            value !== null && typeof value === "object" && !Array.isArray(value)
+          );
+        }
+
+        function parseInput(value) {
+          if (typeof value === "string") {
+            try {
+              value = JSON.parse(value);
+            } catch {
+              return null;
+            }
+          }
+          return isRecord(value) ? value : null;
+        }
+
+        function errorResult(message) {
+          return {
+            success: false,
+            status: "invalid_arguments",
+            stateChanged: false,
+            navigationOccurred: false,
+            warnings: [],
+            error: { code: "invalid_arguments", message },
+          };
+        }
+
+        function flightById(id) {
+          return flights.find((flight) => flight.id === id);
+        }
+
+        function summary(flight) {
+          return {
+            id: flight.id,
+            airline: flight.airline,
+            origin: flight.origin,
+            destination: flight.destination,
+            date: flight.date,
+            departure: flight.departure,
+            arrival: flight.arrival,
+            duration: flight.duration,
+            cabin: flight.cabin,
+            price: flight.price,
+            stops: flight.stops,
+          };
+        }
+
+        function setMessage(message, kind = "") {
+          state.lastMessage = message;
+          const status = byId("status");
+          status.textContent = message;
+          status.className = `status${kind ? ` is-${kind}` : ""}`;
+        }
+
+        function render() {
+          const visible = state.visibleIds.map(flightById).filter(Boolean);
+          byId("trip-status").textContent = state.selectedId
+            ? (flightById(state.selectedId)?.id ?? "Selected")
+            : "No flight";
+          byId("result-count").textContent =
+            `${visible.length} ${visible.length === 1 ? "route" : "routes"}`;
+          const root = byId("flights");
+          root.replaceChildren();
+          if (visible.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "empty";
+            empty.textContent =
+              "No routes match the current search and fare limit.";
+            root.append(empty);
+          }
+          for (const flight of visible) {
+            const card = document.createElement("article");
+            card.className = `flight${state.selectedId === flight.id ? " is-selected" : ""}`;
+            const main = document.createElement("div");
+            const airline = document.createElement("div");
+            airline.className = "flight-airline";
+            airline.textContent = flight.airline;
+            const route = document.createElement("div");
+            route.className = "route";
+            route.textContent = `${flight.origin} `;
+            const arrow = document.createElement("span");
+            arrow.className = "route-arrow";
+            arrow.textContent = "→";
+            route.append(arrow, ` ${flight.destination}`);
+            const meta = document.createElement("div");
+            meta.className = "flight-meta";
+            meta.textContent = `${flight.date} · ${flight.departure}–${flight.arrival} · ${flight.duration} · ${flight.cabin} · ${flight.stops === 0 ? "nonstop" : `${flight.stops} stop`}`;
+            main.append(airline, route, meta);
+            const side = document.createElement("div");
+            side.className = "flight-side";
+            const price = document.createElement("strong");
+            price.className = "flight-price";
+            price.textContent = `$${flight.price}`;
+            const select = document.createElement("button");
+            select.type = "button";
+            select.textContent = "Select route";
+            select.addEventListener("click", () =>
+              runTool("select_flight", { flightId: flight.id }, "ui"),
+            );
+            side.append(price, select);
+            card.append(main, side);
+            card.addEventListener("dblclick", () =>
+              runTool("get_flight_details", { flightId: flight.id }, "ui"),
+            );
+            root.append(card);
+          }
+          const selected = flightById(state.selectedId);
+          const details = byId("details");
+          if (!selected) {
+            details.hidden = true;
+          } else {
+            details.hidden = false;
+            byId("details-route").textContent =
+              `${selected.origin} → ${selected.destination}`;
+            byId("details-description").textContent =
+              `${selected.airline} · ${selected.date} · ${selected.departure}–${selected.arrival} · ${selected.duration} · ${selected.cabin}`;
+            byId("details-price").textContent = `$${selected.price}`;
+          }
+        }
+
+        function searchFlights(input) {
+          const origin =
+            typeof input.origin === "string"
+              ? input.origin.trim().slice(0, 40)
+              : "";
+          const destination =
+            typeof input.destination === "string"
+              ? input.destination.trim().slice(0, 40)
+              : "";
+          if (!origin || !destination)
+            return errorResult(
+              "origin and destination must be non-empty strings.",
+            );
+          const originQuery = origin.toLowerCase();
+          const destinationQuery = destination.toLowerCase();
+          const matches = flights.filter(
+            (flight) =>
+              flight.origin.toLowerCase() === originQuery &&
+              flight.destination.toLowerCase() === destinationQuery,
+          );
+          state.origin = origin;
+          state.destination = destination;
+          state.visibleIds = matches.map((flight) => flight.id);
+          state.selectedId = null;
+          render();
+          setMessage(
+            `Found ${matches.length} route${matches.length === 1 ? "" : "s"} from ${origin} to ${destination}.`,
+            "success",
+          );
+          return {
+            success: true,
+            status: "completed",
+            stateChanged: true,
+            navigationOccurred: false,
+            origin,
+            destination,
+            flightIds: matches.map((flight) => flight.id),
+            flights: matches.map(summary),
+            count: matches.length,
+            warnings: [],
+          };
+        }
+
+        function filterFlights(input) {
+          const maxPrice = input.maxPrice;
+          if (
+            typeof maxPrice !== "number" ||
+            !Number.isFinite(maxPrice) ||
+            maxPrice < 0 ||
+            maxPrice > 10000
+          )
+            return errorResult(
+              "maxPrice must be a finite number from 0 to 10000.",
+            );
+          const requestedIds =
+            input.flightIds === undefined ? state.visibleIds : input.flightIds;
+          if (
+            !Array.isArray(requestedIds) ||
+            requestedIds.length > 20 ||
+            !requestedIds.every((id) => typeof id === "string")
+          )
+            return errorResult(
+              "flightIds must be an array of at most 20 flight IDs.",
+            );
+          if (
+            input.cabin !== undefined &&
+            input.cabin !== "economy" &&
+            input.cabin !== "premium"
+          )
+            return errorResult("cabin must be economy or premium.");
+          const matches = requestedIds
+            .map(flightById)
+            .filter(
+              (flight) =>
+                flight &&
+                flight.price <= maxPrice &&
+                (input.cabin === undefined || flight.cabin === input.cabin),
+            );
+          matches.sort(
+            (left, right) =>
+              left.duration.localeCompare(right.duration) ||
+              left.price - right.price,
+          );
+          state.visibleIds = matches.map((flight) => flight.id);
+          state.selectedId = matches[0]?.id ?? null;
+          render();
+          setMessage(
+            matches.length
+              ? `Fastest matching route: ${matches[0].origin} to ${matches[0].destination} for $${matches[0].price}.`
+              : `No matching route is under $${maxPrice}.`,
+            matches.length ? "success" : "",
+          );
+          return {
+            success: true,
+            status: "completed",
+            stateChanged: true,
+            navigationOccurred: false,
+            maxPrice,
+            flightIds: matches.map((flight) => flight.id),
+            selectedFlightId: matches[0]?.id ?? null,
+            flights: matches.map(summary),
+            count: matches.length,
+            warnings: [],
+          };
+        }
+
+        function getFlightDetails(input) {
+          if (typeof input.flightId !== "string" || !input.flightId.trim())
+            return errorResult("flightId must be a non-empty string.");
+          const flight = flightById(input.flightId);
+          if (!flight)
+            return errorResult(
+              "The requested route is not in this controlled catalog.",
+            );
+          state.selectedId = flight.id;
+          render();
+          setMessage(
+            `Showing details for ${flight.origin} to ${flight.destination}.`,
+            "success",
+          );
+          return {
+            success: true,
+            status: "completed",
+            stateChanged: true,
+            navigationOccurred: false,
+            flightId: flight.id,
+            flight: { ...flight },
+            warnings: [],
+          };
+        }
+
+        function selectFlight(input) {
+          if (typeof input.flightId !== "string" || !input.flightId.trim())
+            return errorResult("flightId must be a non-empty string.");
+          const flight = flightById(input.flightId);
+          if (!flight)
+            return errorResult(
+              "The requested route is not in this controlled catalog.",
+            );
+          state.selectedId = flight.id;
+          render();
+          setMessage(
+            `Selected ${flight.origin} to ${flight.destination}. No booking was made.`,
+            "success",
+          );
+          return {
+            success: true,
+            status: "completed",
+            stateChanged: true,
+            navigationOccurred: false,
+            flightId: flight.id,
+            selected: { ...flight },
+            bookingCreated: false,
+            warnings: [],
+          };
+        }
+
+        function executeTool(name, input) {
+          const parsed = parseInput(input);
+          if (!parsed) return errorResult("Tool input must be a JSON object.");
+          if (name === "search_flights") return searchFlights(parsed);
+          if (name === "filter_flights") return filterFlights(parsed);
+          if (name === "get_flight_details") return getFlightDetails(parsed);
+          if (name === "select_flight") return selectFlight(parsed);
+          return errorResult(
+            "The requested tool is not registered on this target.",
+          );
+        }
+
+        function descriptor(definition) {
+          return {
+            name: definition.name,
+            description: definition.description,
+            inputSchema: definition.inputSchema,
+            annotations: definition.annotations,
+            effect: definition.effect,
+            source: "native",
+            confidence: 1,
+            evidence: [{ type: "dom", note: definition.evidence }],
+          };
+        }
+
+        function post(message) {
+          if (window.parent !== window)
+            window.parent.postMessage(
+              { channel: CHANNEL, version: VERSION, ...message },
+              location.origin,
+            );
+        }
+
+        function snapshot() {
+          return {
+            selectedFlightId: state.selectedId,
+            visibleFlightIds: [...state.visibleIds],
+            origin: state.origin,
+            destination: state.destination,
+          };
+        }
+
+        async function runTool(name, input, source = "parent") {
+          const result = executeTool(name, input);
+          post({ type: "state", source, action: name, state: snapshot() });
+          return result;
+        }
+
+        function handleParentMessage(event) {
+          if (
+            event.source !== window.parent ||
+            event.origin !== location.origin ||
+            !isRecord(event.data)
+          )
+            return;
+          const message = event.data;
+          if (
+            message.channel !== CHANNEL ||
+            message.version !== VERSION ||
+            message.type !== "invoke"
+          )
+            return;
+          if (
+            typeof message.requestId !== "string" ||
+            message.requestId.length < 1 ||
+            message.requestId.length > 120 ||
+            typeof message.name !== "string"
+          )
+            return;
+          Promise.resolve(runTool(message.name, message.input, "parent")).then(
+            (result) => {
+              post({
+                type: "invoke-result",
+                requestId: message.requestId,
+                name: message.name,
+                result,
+              });
+            },
+          );
+        }
+
+        async function registerNativeTools() {
+          if (!context || typeof context.registerTool !== "function") {
+            byId("native-status").textContent =
+              "Preview only · native registerTool unavailable";
+            return;
+          }
+          nativeAvailable = true;
+          for (const definition of toolDefinitions) {
+            const tool = {
+              name: definition.name,
+              description: definition.description,
+              inputSchema: definition.inputSchema,
+              annotations: definition.annotations,
+              execute: (input) => runTool(definition.name, input, "native"),
+            };
+            registered.set(definition.name, tool);
+            try {
+              await Promise.resolve(context.registerTool(tool));
+              registeredNames.push(definition.name);
+            } catch (error) {
+              rejectedNames.push({
+                name: definition.name,
+                message:
+                  error instanceof Error
+                    ? error.message
+                    : "registration rejected",
+              });
+            }
+          }
+          if (rejectedNames.length === 0) {
+            byId("native-status").textContent =
+              `Live WebMCP · ${registeredNames.length} primitives registered`;
+            byId("native-status").classList.add("is-live");
+          } else {
+            byId("native-status").textContent =
+              `Partial registration · ${registeredNames.length} live`;
+            byId("native-status").classList.add("is-live");
+          }
+        }
+
+        byId("search-form").addEventListener("submit", (event) => {
+          event.preventDefault();
+          const origin = byId("origin").value;
+          const destination = byId("destination").value;
+          const maxPrice = Number(byId("max-price").value);
+          const search = runTool(
+            "search_flights",
+            { origin, destination },
+            "ui",
+          );
+          Promise.resolve(search).then((searchResult) => {
+            if (searchResult.success)
+              runTool(
+                "filter_flights",
+                { flightIds: searchResult.flightIds, maxPrice },
+                "ui",
+              );
+            else setMessage(searchResult.error.message, "error");
+          });
+        });
+        window.addEventListener("message", handleParentMessage);
+        render();
+
+        registerNativeTools().then(() => {
+          post({
+            type: "ready",
+            target: {
+              id: TARGET_ID,
+              name: "Northstar Routes",
+              url: `${location.origin}${location.pathname}`,
+              origin: location.origin,
+              executable: true,
+            },
+            native: {
+              available: nativeAvailable,
+              registered: [...registeredNames],
+              rejected: [...rejectedNames],
+            },
+            tools: toolDefinitions.map(descriptor),
+            state: snapshot(),
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>

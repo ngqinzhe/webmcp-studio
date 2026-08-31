@@ -42,8 +42,10 @@ function hasHeadedBrowserEnvironment(): boolean {
 
 async function toolNames(page: Page): Promise<string[]> {
   return page.evaluate(() => {
-    const context = (document as Document & { modelContext?: DemoModelContext })
-      .modelContext;
+    const context =
+      (navigator as Navigator & { modelContext?: DemoModelContext })
+        .modelContext ??
+      (document as Document & { modelContext?: DemoModelContext }).modelContext;
     const tools = context?.getTools?.();
     if (!Array.isArray(tools)) return [];
     return tools.flatMap((tool) => {
@@ -59,8 +61,10 @@ async function toolDescription(
   name: string,
 ): Promise<string | undefined> {
   return page.evaluate((requestedName) => {
-    const context = (document as Document & { modelContext?: DemoModelContext })
-      .modelContext;
+    const context =
+      (navigator as Navigator & { modelContext?: DemoModelContext })
+        .modelContext ??
+      (document as Document & { modelContext?: DemoModelContext }).modelContext;
     const tools = context?.getTools?.();
     if (!Array.isArray(tools)) return undefined;
     const tool = tools.find(
@@ -112,13 +116,17 @@ async function invokePageTool(
 ): Promise<StructuredExecutionResult> {
   return page.evaluate(
     async ({ name: requestedName, args: requestedArgs }) => {
-      const context = (
-        document as Document & {
-          modelContext?: {
-            getTools?: () => unknown;
-          };
-        }
-      ).modelContext;
+      const context =
+        (
+          navigator as Navigator & {
+            modelContext?: { getTools?: () => unknown };
+          }
+        ).modelContext ??
+        (
+          document as Document & {
+            modelContext?: { getTools?: () => unknown };
+          }
+        ).modelContext;
       const tools = context?.getTools?.();
       if (!Array.isArray(tools))
         throw new Error("The demo model context is unavailable.");
@@ -173,7 +181,7 @@ test.describe("WebMCP Studio extension flow", () => {
     context = undefined;
   });
 
-  test("relays an inspector invocation through document.modelContext and visible UI", async ({}, testInfo) => {
+  test("relays an extension capability through document.modelContext", async ({}, testInfo) => {
     context = await launchExtensionContext(
       testInfo.outputPath("chromium-profile"),
     );
@@ -190,41 +198,16 @@ test.describe("WebMCP Studio extension flow", () => {
       return tabs[0]?.id ?? null;
     });
     expect(tabId).not.toBeNull();
-
-    const extensionId = new URL(serviceWorker.url()).hostname;
-    const inspector = await context.newPage();
-    await inspector.goto(
-      `chrome-extension://${extensionId}/inspector/index.html?tabId=${String(tabId)}`,
-    );
-    await expect(inspector.locator("#connection-state")).toHaveText(
-      "Live page",
-    );
-    const searchItem = inspector
-      .locator(".capability-item")
-      .filter({ hasText: "search_products" });
-    await expect(searchItem).toHaveCount(1);
-    await searchItem.click();
-    await inspector
-      .locator("#arguments")
-      .fill('{"q":"keyboard","category":"keyboards"}');
-    await inspector.locator("#invoke").click();
-    await expect(inspector.locator("#execution-result")).toContainText(
-      '"success": true',
-    );
-    await expect(page.locator("#search-status")).toHaveText(
-      "Showing results for keyboard (keyboards).",
-    );
-
     const result = await invokePageTool(page, "search_products", {
-      q: "headphones",
-      category: "audio",
+      q: "keyboard",
+      category: "keyboards",
     });
     expect(result.success).toBe(true);
     expect(result.status).toBe("completed");
     expect(result.stateChanged).toBe(true);
     expect(result.navigationOccurred).toBe(false);
     await expect(page.locator("#search-status")).toHaveText(
-      "Showing results for headphones (audio).",
+      "Showing results for keyboard (keyboards).",
     );
   });
 

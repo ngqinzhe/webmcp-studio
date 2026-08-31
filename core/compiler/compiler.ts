@@ -4,10 +4,13 @@ import type {
   JsonValue,
   NativeToolSummary,
 } from "../types";
+import type { ProjectDocument } from "../project";
+import { getToolAvailability } from "../project";
 import type {
   CompilationResult,
   CompilerOptions,
   NativeToolInput,
+  ProjectToolCompilerOptions,
   WebMcpToolAnnotations,
   WebMcpToolDescriptor,
 } from "./types";
@@ -159,6 +162,51 @@ export function compileCapability(
     annotations: annotationForEffect(capability.effect),
   };
 }
+
+/** Stable invocation identity used by the content runtime for project tools. */
+export function workflowCapabilityId(
+  projectId: string,
+  toolId: string,
+): string {
+  return `workflow:${projectId}:${toolId}`;
+}
+
+/** Compile approved project tools into page-side descriptors without shipping executable config. */
+export function compileProjectTools(
+  project: ProjectDocument,
+  options: ProjectToolCompilerOptions = {},
+): WebMcpToolDescriptor[] {
+  const availability = new Map(
+    getToolAvailability(project, options.session).map((entry) => [
+      entry.toolId,
+      entry,
+    ]),
+  );
+  return project.tools
+    .filter((tool) => {
+      const state = availability.get(tool.id);
+      return (
+        tool.enabled &&
+        (options.session === undefined ||
+          options.includeUnavailable === true ||
+          state?.available === true)
+      );
+    })
+    .map((tool) => ({
+      capabilityId: workflowCapabilityId(project.project.id, tool.id),
+      name: tool.name,
+      description: tool.description,
+      inputSchema: cloneJsonSchema(tool.inputSchema),
+      annotations: {},
+      kind: "workflow" as const,
+      projectId: project.project.id,
+      toolId: tool.id,
+      access: tool.access,
+      available: availability.get(tool.id)?.available === true,
+    }));
+}
+
+export const compileWorkflowTools = compileProjectTools;
 
 /**
  * Compile capabilities and retain diagnostics for an inspector or adapter

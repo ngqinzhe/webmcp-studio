@@ -1,0 +1,1008 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f5f1e8" />
+    <title>Northstar Supply · Controlled commerce target</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #202b2a;
+        --muted: #697773;
+        --faint: #8d9993;
+        --line: #d9e0d8;
+        --surface: #ffffff;
+        --canvas: #f5f1e8;
+        --mint: #2f9b70;
+        --mint-soft: #e0f2e8;
+        --coral: #c76a4d;
+        --yellow: #b98628;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-width: 280px;
+        color: var(--ink);
+        background: var(--canvas);
+      }
+      button,
+      input {
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      .site {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 18px 20px 28px;
+      }
+      .masthead {
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: 16px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      .eyebrow {
+        margin: 0 0 5px;
+        color: var(--mint);
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font:
+          400 clamp(26px, 5vw, 38px)/0.98 Georgia,
+          "Times New Roman",
+          serif;
+        letter-spacing: -0.045em;
+      }
+      .subtitle {
+        max-width: 420px;
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.5;
+      }
+      .cart {
+        display: grid;
+        justify-items: end;
+        gap: 3px;
+        min-width: 73px;
+        padding: 8px 10px;
+        border: 1px solid #b9d5c4;
+        border-radius: 9px;
+        color: var(--mint);
+        background: var(--mint-soft);
+      }
+      .cart strong {
+        font-size: 18px;
+        line-height: 1;
+      }
+      .cart span {
+        font-size: 8px;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+      .native-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin: 14px 0;
+        padding: 8px 10px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.58);
+        font-size: 9px;
+      }
+      .native-row strong {
+        color: var(--ink);
+        font-size: 9px;
+      }
+      .native-status {
+        color: var(--yellow);
+        font-weight: 750;
+        text-align: right;
+      }
+      .native-status.is-live {
+        color: var(--mint);
+      }
+      .controls {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 130px auto;
+        gap: 8px;
+        margin-bottom: 15px;
+      }
+      label {
+        display: grid;
+        gap: 5px;
+        color: var(--muted);
+        font-size: 9px;
+        font-weight: 750;
+      }
+      input {
+        width: 100%;
+        min-width: 0;
+        padding: 9px 10px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        outline: none;
+        color: var(--ink);
+        background: var(--surface);
+        font-size: 11px;
+      }
+      input:focus {
+        border-color: var(--mint);
+        box-shadow: 0 0 0 3px rgba(47, 155, 112, 0.1);
+      }
+      .button {
+        align-self: end;
+        min-height: 36px;
+        padding: 8px 12px;
+        border: 1px solid var(--mint);
+        border-radius: 7px;
+        color: #fff;
+        background: var(--mint);
+        font-size: 10px;
+        font-weight: 800;
+      }
+      .button:hover {
+        background: #25845f;
+      }
+      .button.secondary {
+        border-color: var(--line);
+        color: var(--ink);
+        background: var(--surface);
+      }
+      .status {
+        min-height: 17px;
+        margin: 0 0 12px;
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .status.is-error {
+        color: var(--coral);
+      }
+      .status.is-success {
+        color: var(--mint);
+      }
+      .section-heading {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 8px;
+      }
+      h2 {
+        font-size: 13px;
+        letter-spacing: -0.02em;
+      }
+      .section-heading span {
+        color: var(--faint);
+        font-size: 9px;
+      }
+      .products {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 9px;
+      }
+      .product {
+        display: grid;
+        gap: 8px;
+        padding: 11px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: var(--surface);
+        transition:
+          border-color 0.18s ease,
+          box-shadow 0.18s ease;
+      }
+      .product.is-selected {
+        border-color: #8bc8a9;
+        box-shadow: 0 0 0 3px rgba(47, 155, 112, 0.08);
+      }
+      .product-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .product-category {
+        color: var(--mint);
+        font-size: 8px;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+      .product-price {
+        color: var(--ink);
+        font-size: 13px;
+        font-weight: 800;
+      }
+      .product h3 {
+        font-size: 12px;
+        line-height: 1.2;
+      }
+      .product p {
+        min-height: 31px;
+        color: var(--muted);
+        font-size: 9px;
+        line-height: 1.45;
+      }
+      .product-meta {
+        display: flex;
+        gap: 8px;
+        color: var(--faint);
+        font-size: 8px;
+      }
+      .product-actions {
+        display: flex;
+        gap: 6px;
+      }
+      .product-actions button {
+        flex: 1;
+        min-height: 28px;
+        padding: 5px 6px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: var(--ink);
+        background: #fbfcfa;
+        font-size: 9px;
+        font-weight: 750;
+      }
+      .product-actions button:last-child {
+        border-color: #b9d5c4;
+        color: var(--mint);
+        background: var(--mint-soft);
+      }
+      .empty {
+        grid-column: 1 / -1;
+        padding: 28px 12px;
+        border: 1px dashed var(--line);
+        border-radius: 9px;
+        color: var(--faint);
+        text-align: center;
+        font-size: 10px;
+      }
+      .details {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: start;
+        margin-top: 14px;
+        padding: 11px;
+        border: 1px solid #e1d6bd;
+        border-radius: 9px;
+        background: #fffaf0;
+      }
+      .details[hidden] {
+        display: none;
+      }
+      .details .eyebrow {
+        color: var(--yellow);
+      }
+      .details h2 {
+        font-size: 14px;
+      }
+      .details p {
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 9px;
+        line-height: 1.45;
+      }
+      .details-price {
+        color: var(--yellow);
+        font-size: 15px;
+        font-weight: 800;
+      }
+      .footnote {
+        margin-top: 16px;
+        color: var(--faint);
+        font-size: 8px;
+        line-height: 1.5;
+      }
+      @media (max-width: 500px) {
+        .site {
+          padding: 14px 13px 22px;
+        }
+        .controls {
+          grid-template-columns: 1fr 1fr;
+        }
+        .controls label:first-child {
+          grid-column: 1 / -1;
+        }
+        .controls .button {
+          grid-column: 1 / -1;
+        }
+        .products {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="site">
+      <header class="masthead">
+        <div>
+          <p class="eyebrow">Controlled commerce target</p>
+          <h1>Northstar Supply</h1>
+          <p class="subtitle">
+            A deterministic product catalog for demonstrating page-native tools.
+            No checkout, payment, or external network calls occur here.
+          </p>
+        </div>
+        <div class="cart" aria-label="Shopping cart">
+          <strong id="cart-count">0</strong>
+          <span>in cart</span>
+        </div>
+      </header>
+
+      <div class="native-row">
+        <strong>WebMCP target status</strong>
+        <span id="native-status" class="native-status"
+          >Checking browser API…</span
+        >
+      </div>
+
+      <form
+        id="search-form"
+        class="controls"
+        aria-label="Search and filter products"
+      >
+        <label
+          >Product requirements
+          <input
+            id="query"
+            name="query"
+            type="search"
+            value="keyboard"
+            maxlength="80"
+            placeholder="keyboard"
+          />
+        </label>
+        <label
+          >Max price (USD)
+          <input
+            id="max-price"
+            name="maxPrice"
+            type="number"
+            min="0"
+            max="10000"
+            step="1"
+            value="200"
+          />
+        </label>
+        <button class="button" type="submit">Search catalog</button>
+      </form>
+      <p id="status" class="status" role="status" aria-live="polite">
+        Ready for a page-native search.
+      </p>
+
+      <section aria-labelledby="products-title">
+        <div class="section-heading">
+          <h2 id="products-title">Products</h2>
+          <span id="result-count">4 available</span>
+        </div>
+        <div id="products" class="products"></div>
+      </section>
+
+      <section id="details" class="details" aria-live="polite" hidden>
+        <div>
+          <p class="eyebrow">Selected product</p>
+          <h2 id="details-name"></h2>
+          <p id="details-description"></p>
+        </div>
+        <strong id="details-price" class="details-price"></strong>
+      </section>
+
+      <p class="footnote">
+        The Studio parent receives only tool names, schemas, evidence, and
+        structured results. Product state stays inside this controlled target.
+      </p>
+    </main>
+
+    <script>
+      (() => {
+        "use strict";
+
+        const CHANNEL = "webmcp-studio-target";
+        const VERSION = 1;
+        const TARGET_ID = "commerce";
+        const products = [
+          {
+            id: "northstar-mechanical-keyboard",
+            name: "Northstar Mechanical Keyboard",
+            description:
+              "Quiet tactile switches, compact aluminum frame, and a detachable USB-C cable.",
+            category: "keyboard",
+            price: 129,
+            rating: 4.9,
+            stock: 12,
+          },
+          {
+            id: "aster-compact-keyboard",
+            name: "Aster Compact Keyboard",
+            description:
+              "A low-profile wireless keyboard with a small footprint for focused desks.",
+            category: "keyboard",
+            price: 89,
+            rating: 4.6,
+            stock: 8,
+          },
+          {
+            id: "orbit-desk-lamp",
+            name: "Orbit Desk Lamp",
+            description:
+              "Warm adjustable task light with a weighted base and a soft-touch dimmer.",
+            category: "lighting",
+            price: 74,
+            rating: 4.7,
+            stock: 20,
+          },
+          {
+            id: "meridian-desk-mat",
+            name: "Meridian Desk Mat",
+            description:
+              "Recycled felt surface sized for a keyboard, mouse, and a clear notebook space.",
+            category: "desk",
+            price: 42,
+            rating: 4.4,
+            stock: 31,
+          },
+        ];
+        const state = {
+          query: "",
+          visibleIds: products.map((product) => product.id),
+          selectedId: null,
+          cart: new Map(),
+          lastMessage: "Ready for a page-native search.",
+        };
+
+        const byId = (id) => document.getElementById(id);
+        const context = document.modelContext;
+        const registered = new Map();
+        let nativeAvailable = false;
+        let registeredNames = [];
+        let rejectedNames = [];
+
+        const emptySchema = {
+          type: "object",
+          properties: {},
+          required: [],
+          additionalProperties: false,
+        };
+        const toolDefinitions = [
+          {
+            name: "search_products",
+            description:
+              "Search the controlled Northstar product catalog by requirements.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                query: { type: "string", minLength: 1, maxLength: 80 },
+              },
+              required: ["query"],
+              additionalProperties: false,
+            },
+            annotations: { readOnlyHint: true },
+            effect: "read",
+            evidence: "Product requirements search field",
+          },
+          {
+            name: "filter_products",
+            description:
+              "Filter searched products by a maximum price and choose the highest-rated match.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                productIds: {
+                  type: "array",
+                  items: { type: "string" },
+                  maxItems: 20,
+                },
+                maxPrice: { type: "number", minimum: 0, maximum: 10000 },
+              },
+              required: ["maxPrice"],
+              additionalProperties: false,
+            },
+            annotations: { readOnlyHint: true },
+            effect: "read",
+            evidence: "Maximum price control and product results",
+          },
+          {
+            name: "get_product_details",
+            description:
+              "Read details for one product in the current controlled catalog.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                productId: { type: "string", minLength: 1, maxLength: 100 },
+              },
+              required: ["productId"],
+              additionalProperties: false,
+            },
+            annotations: { readOnlyHint: true },
+            effect: "read",
+            evidence: "Product card details action",
+          },
+          {
+            name: "add_to_cart",
+            description:
+              "Add one selected Northstar product to the in-page cart; no checkout is performed.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                productId: { type: "string", minLength: 1, maxLength: 100 },
+                quantity: {
+                  type: "integer",
+                  minimum: 1,
+                  maximum: 9,
+                  default: 1,
+                },
+              },
+              required: ["productId"],
+              additionalProperties: false,
+            },
+            annotations: { readOnlyHint: false },
+            effect: "mutate",
+            evidence: "Add to cart button and cart counter",
+          },
+        ];
+
+        function isRecord(value) {
+          return (
+            value !== null && typeof value === "object" && !Array.isArray(value)
+          );
+        }
+
+        function parseInput(value) {
+          if (typeof value === "string") {
+            try {
+              value = JSON.parse(value);
+            } catch {
+              return null;
+            }
+          }
+          return isRecord(value) ? value : null;
+        }
+
+        function errorResult(message) {
+          return {
+            success: false,
+            status: "invalid_arguments",
+            stateChanged: false,
+            navigationOccurred: false,
+            warnings: [],
+            error: { code: "invalid_arguments", message },
+          };
+        }
+
+        function productById(id) {
+          return products.find((product) => product.id === id);
+        }
+
+        function summary(product) {
+          return {
+            id: product.id,
+            name: product.name,
+            category: product.category,
+            price: product.price,
+            rating: product.rating,
+          };
+        }
+
+        function cartCount() {
+          let count = 0;
+          for (const quantity of state.cart.values()) count += quantity;
+          return count;
+        }
+
+        function cartTotal() {
+          let total = 0;
+          for (const [id, quantity] of state.cart.entries()) {
+            const product = productById(id);
+            if (product) total += product.price * quantity;
+          }
+          return Number(total.toFixed(2));
+        }
+
+        function setMessage(message, kind = "") {
+          state.lastMessage = message;
+          const status = byId("status");
+          status.textContent = message;
+          status.className = `status${kind ? ` is-${kind}` : ""}`;
+        }
+
+        function render() {
+          byId("cart-count").textContent = String(cartCount());
+          const visible = state.visibleIds.map(productById).filter(Boolean);
+          byId("result-count").textContent =
+            `${visible.length} ${visible.length === 1 ? "match" : "matches"}`;
+          const root = byId("products");
+          root.replaceChildren();
+          if (visible.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "empty";
+            empty.textContent = "No products match the current requirements.";
+            root.append(empty);
+          }
+          for (const product of visible) {
+            const card = document.createElement("article");
+            card.className = `product${state.selectedId === product.id ? " is-selected" : ""}`;
+            const top = document.createElement("div");
+            top.className = "product-top";
+            const category = document.createElement("span");
+            category.className = "product-category";
+            category.textContent = product.category;
+            const price = document.createElement("strong");
+            price.className = "product-price";
+            price.textContent = `$${product.price}`;
+            top.append(category, price);
+            const name = document.createElement("h3");
+            name.textContent = product.name;
+            const description = document.createElement("p");
+            description.textContent = product.description;
+            const meta = document.createElement("div");
+            meta.className = "product-meta";
+            meta.textContent = `★ ${product.rating} · ${product.stock} in stock`;
+            const actions = document.createElement("div");
+            actions.className = "product-actions";
+            const detailsButton = document.createElement("button");
+            detailsButton.type = "button";
+            detailsButton.textContent = "Details";
+            detailsButton.addEventListener("click", () =>
+              runTool("get_product_details", { productId: product.id }, "ui"),
+            );
+            const addButton = document.createElement("button");
+            addButton.type = "button";
+            addButton.textContent = "Add to cart";
+            addButton.addEventListener("click", () =>
+              runTool("add_to_cart", { productId: product.id }, "ui"),
+            );
+            actions.append(detailsButton, addButton);
+            card.append(top, name, description, meta, actions);
+            root.append(card);
+          }
+          const selected = productById(state.selectedId);
+          const details = byId("details");
+          if (!selected) {
+            details.hidden = true;
+          } else {
+            details.hidden = false;
+            byId("details-name").textContent = selected.name;
+            byId("details-description").textContent = selected.description;
+            byId("details-price").textContent = `$${selected.price}`;
+          }
+        }
+
+        function matchesQuery(product, query) {
+          const haystack =
+            `${product.name} ${product.description} ${product.category}`.toLowerCase();
+          return query.split(/\s+/).every((token) => haystack.includes(token));
+        }
+
+        function searchProducts(input) {
+          const query =
+            typeof input.query === "string"
+              ? input.query.trim().slice(0, 80)
+              : "";
+          if (!query) return errorResult("query must be a non-empty string.");
+          const matches = products.filter((product) =>
+            matchesQuery(product, query),
+          );
+          state.query = query;
+          state.visibleIds = matches.map((product) => product.id);
+          state.selectedId = null;
+          render();
+          setMessage(
+            `Found ${matches.length} product${matches.length === 1 ? "" : "s"} for “${query}”.`,
+            "success",
+          );
+          return {
+            success: true,
+            status: "completed",
+            stateChanged: true,
+            navigationOccurred: false,
+            query,
+            productIds: matches.map((product) => product.id),
+            products: matches.map(summary),
+            count: matches.length,
+            warnings: [],
+          };
+        }
+
+        function filterProducts(input) {
+          const maxPrice = input.maxPrice;
+          if (
+            typeof maxPrice !== "number" ||
+            !Number.isFinite(maxPrice) ||
+            maxPrice < 0 ||
+            maxPrice > 10000
+          )
+            return errorResult(
+              "maxPrice must be a finite number from 0 to 10000.",
+            );
+          const requestedIds =
+            input.productIds === undefined
+              ? state.visibleIds
+              : input.productIds;
+          if (
+            !Array.isArray(requestedIds) ||
+            requestedIds.length > 20 ||
+            !requestedIds.every((id) => typeof id === "string")
+          )
+            return errorResult(
+              "productIds must be an array of at most 20 product IDs.",
+            );
+          const matches = requestedIds
+            .map(productById)
+            .filter((product) => product && product.price <= maxPrice);
+          matches.sort(
+            (left, right) =>
+              right.rating - left.rating || left.price - right.price,
+          );
+          state.visibleIds = matches.map((product) => product.id);
+          state.selectedId = matches[0]?.id ?? null;
+          render();
+          setMessage(
+            matches.length
+              ? `Best match: ${matches[0].name} under $${maxPrice}.`
+              : `No matching product is under $${maxPrice}.`,
+            matches.length ? "success" : "",
+          );
+          return {
+            success: true,
+            status: "completed",
+            stateChanged: true,
+            navigationOccurred: false,
+            maxPrice,
+            productIds: matches.map((product) => product.id),
+            selectedProductId: matches[0]?.id ?? null,
+            products: matches.map(summary),
+            count: matches.length,
+            warnings: [],
+          };
+        }
+
+        function getProductDetails(input) {
+          if (typeof input.productId !== "string" || !input.productId.trim())
+            return errorResult("productId must be a non-empty string.");
+          const product = productById(input.productId);
+          if (!product)
+            return errorResult(
+              "The requested product is not in this controlled catalog.",
+            );
+          state.selectedId = product.id;
+          render();
+          setMessage(`Showing details for ${product.name}.`, "success");
+          return {
+            success: true,
+            status: "completed",
+            stateChanged: true,
+            navigationOccurred: false,
+            productId: product.id,
+            product: { ...product },
+            warnings: [],
+          };
+        }
+
+        function addToCart(input) {
+          if (typeof input.productId !== "string" || !input.productId.trim())
+            return errorResult("productId must be a non-empty string.");
+          const quantity = input.quantity === undefined ? 1 : input.quantity;
+          if (!Number.isInteger(quantity) || quantity < 1 || quantity > 9)
+            return errorResult("quantity must be an integer from 1 to 9.");
+          const product = productById(input.productId);
+          if (!product)
+            return errorResult(
+              "The requested product is not in this controlled catalog.",
+            );
+          const current = state.cart.get(product.id) ?? 0;
+          if (current + quantity > product.stock)
+            return errorResult(
+              "The requested quantity exceeds the controlled stock.",
+            );
+          state.cart.set(product.id, current + quantity);
+          state.selectedId = product.id;
+          render();
+          setMessage(`Added ${product.name} to cart.`, "success");
+          return {
+            success: true,
+            status: "completed",
+            stateChanged: true,
+            navigationOccurred: false,
+            productId: product.id,
+            productName: product.name,
+            quantity,
+            cartCount: cartCount(),
+            cartTotal: cartTotal(),
+            warnings: [],
+          };
+        }
+
+        function executeTool(name, input) {
+          const parsed = parseInput(input);
+          if (!parsed) return errorResult("Tool input must be a JSON object.");
+          if (name === "search_products") return searchProducts(parsed);
+          if (name === "filter_products") return filterProducts(parsed);
+          if (name === "get_product_details") return getProductDetails(parsed);
+          if (name === "add_to_cart") return addToCart(parsed);
+          return errorResult(
+            "The requested tool is not registered on this target.",
+          );
+        }
+
+        function descriptor(definition) {
+          return {
+            name: definition.name,
+            description: definition.description,
+            inputSchema: definition.inputSchema,
+            annotations: definition.annotations,
+            effect: definition.effect,
+            source: "native",
+            confidence: 1,
+            evidence: [{ type: "dom", note: definition.evidence }],
+          };
+        }
+
+        function post(message) {
+          if (window.parent !== window)
+            window.parent.postMessage(
+              { channel: CHANNEL, version: VERSION, ...message },
+              location.origin,
+            );
+        }
+
+        function snapshot() {
+          return {
+            cartCount: cartCount(),
+            cartTotal: cartTotal(),
+            selectedProductId: state.selectedId,
+            visibleProductIds: [...state.visibleIds],
+            query: state.query,
+          };
+        }
+
+        async function runTool(name, input, source = "parent") {
+          const result = executeTool(name, input);
+          post({ type: "state", source, action: name, state: snapshot() });
+          return result;
+        }
+
+        function handleParentMessage(event) {
+          if (
+            event.source !== window.parent ||
+            event.origin !== location.origin ||
+            !isRecord(event.data)
+          )
+            return;
+          const message = event.data;
+          if (
+            message.channel !== CHANNEL ||
+            message.version !== VERSION ||
+            message.type !== "invoke"
+          )
+            return;
+          if (
+            typeof message.requestId !== "string" ||
+            message.requestId.length < 1 ||
+            message.requestId.length > 120 ||
+            typeof message.name !== "string"
+          )
+            return;
+          Promise.resolve(runTool(message.name, message.input, "parent")).then(
+            (result) => {
+              post({
+                type: "invoke-result",
+                requestId: message.requestId,
+                name: message.name,
+                result,
+              });
+            },
+          );
+        }
+
+        async function registerNativeTools() {
+          if (!context || typeof context.registerTool !== "function") {
+            byId("native-status").textContent =
+              "Preview only · native registerTool unavailable";
+            return;
+          }
+          nativeAvailable = true;
+          for (const definition of toolDefinitions) {
+            const tool = {
+              name: definition.name,
+              description: definition.description,
+              inputSchema: definition.inputSchema,
+              annotations: definition.annotations,
+              execute: (input) => runTool(definition.name, input, "native"),
+            };
+            registered.set(definition.name, tool);
+            try {
+              await Promise.resolve(context.registerTool(tool));
+              registeredNames.push(definition.name);
+            } catch (error) {
+              rejectedNames.push({
+                name: definition.name,
+                message:
+                  error instanceof Error
+                    ? error.message
+                    : "registration rejected",
+              });
+            }
+          }
+          if (rejectedNames.length === 0) {
+            byId("native-status").textContent =
+              `Live WebMCP · ${registeredNames.length} primitives registered`;
+            byId("native-status").classList.add("is-live");
+          } else {
+            byId("native-status").textContent =
+              `Partial registration · ${registeredNames.length} live`;
+            byId("native-status").classList.add("is-live");
+          }
+        }
+
+        byId("search-form").addEventListener("submit", (event) => {
+          event.preventDefault();
+          const query = byId("query").value;
+          const maxPrice = Number(byId("max-price").value);
+          const search = runTool("search_products", { query }, "ui");
+          Promise.resolve(search).then((searchResult) => {
+            if (searchResult.success)
+              runTool(
+                "filter_products",
+                { productIds: searchResult.productIds, maxPrice },
+                "ui",
+              );
+            else setMessage(searchResult.error.message, "error");
+          });
+        });
+        window.addEventListener("message", handleParentMessage);
+        render();
+
+        registerNativeTools().then(() => {
+          post({
+            type: "ready",
+            target: {
+              id: TARGET_ID,
+              name: "Northstar Supply",
+              url: `${location.origin}${location.pathname}`,
+              origin: location.origin,
+              executable: true,
+            },
+            native: {
+              available: nativeAvailable,
+              registered: [...registeredNames],
+              rejected: [...rejectedNames],
+            },
+            tools: toolDefinitions.map(descriptor),
+            state: snapshot(),
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>

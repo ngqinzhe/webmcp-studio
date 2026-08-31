@@ -37,6 +37,13 @@ function tabSender(id: number): chrome.runtime.MessageSender {
   return { tab: { id } as chrome.tabs.Tab };
 }
 
+function extensionPageSender(id: number): chrome.runtime.MessageSender {
+  return {
+    tab: { id } as chrome.tabs.Tab,
+    url: "chrome-extension://test/inspector/index.html?tabId=11",
+  };
+}
+
 const selectedState = pageState("Selected-tab");
 const inspectorMarkup = readFileSync(
   resolve("extension/inspector/index.html"),
@@ -44,23 +51,41 @@ const inspectorMarkup = readFileSync(
 );
 let listeners: MessageListener[];
 let sendMessage: ReturnType<typeof vi.fn>;
+let actionClick: ((tab: chrome.tabs.Tab) => void) | undefined;
+let createTab: ReturnType<typeof vi.fn>;
+let executeScript: ReturnType<typeof vi.fn>;
+let sendToContent: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.resetModules();
   listeners = [];
   sendMessage = vi.fn().mockResolvedValue({ ok: true, state: selectedState });
+  createTab = vi.fn().mockResolvedValue({ id: 99 });
+  executeScript = vi.fn().mockResolvedValue(undefined);
+  sendToContent = vi.fn().mockResolvedValue({ ok: true, state: selectedState });
+  actionClick = undefined;
   vi.stubGlobal("chrome", {
     runtime: {
       onMessage: {
         addListener: (listener: MessageListener) => listeners.push(listener),
       },
       sendMessage,
+      getURL: (path: string) => `chrome-extension://test/${path}`,
     },
-    action: { onClicked: { addListener: vi.fn() } },
+    action: {
+      onClicked: {
+        addListener: (listener: (tab: chrome.tabs.Tab) => void) => {
+          actionClick = listener;
+        },
+      },
+    },
     tabs: {
       onRemoved: { addListener: vi.fn() },
       onUpdated: { addListener: vi.fn() },
+      create: createTab,
+      sendMessage: sendToContent,
     },
+    scripting: { executeScript },
   });
 });
 
@@ -158,5 +183,62 @@ describe("service-worker state broadcasts", () => {
     );
 
     expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("routes a content command to its sender tab, not a claimed tab", async () => {
+    const response = new Promise<unknown>((resolve) => {
+      listeners[0]!(
+        { type: "polyfill:get-state", tabId: 11 },
+        tabSender(22),
+        resolve,
+      );
+    });
+
+    await expect(response).resolves.toEqual({ ok: true, state: selectedState });
+    expect(sendToContent).toHaveBeenCalledWith(22, {
+      type: "polyfill:get-state",
+      tabId: 22,
+    });
+  });
+
+  it("keeps an extension-page command bound to its explicit tab", async () => {
+    const response = new Promise<unknown>((resolve) => {
+      listeners[0]!(
+        { type: "polyfill:get-state", tabId: 11 },
+        extensionPageSender(22),
+        resolve,
+      );
+    });
+
+    await expect(response).resolves.toEqual({ ok: true, state: selectedState });
+    expect(sendToContent).toHaveBeenCalledWith(11, {
+      type: "polyfill:get-state",
+      tabId: 11,
+    });
+  });
+
+  it("opens Studio for the clicked tab and injects both page adapters", async () => {
+    expect(actionClick).toBeTypeOf("function");
+    actionClick!({
+      id: 42,
+      url: "https://shop.test/catalog",
+    } as chrome.tabs.Tab);
+
+    await vi.waitFor(() => expect(createTab).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(executeScript).toHaveBeenCalledTimes(2));
+
+    expect(createTab).toHaveBeenCalledWith({
+      url: "chrome-extension://test/inspector/index.html?tabId=42",
+    });
+    expect(executeScript).toHaveBeenNthCalledWith(1, {
+      target: { tabId: 42 },
+      world: "MAIN",
+      files: ["main-world.js"],
+    });
+    expect(executeScript).toHaveBeenNthCalledWith(2, {
+      target: { tabId: 42 },
+      world: "ISOLATED",
+      files: ["content.js"],
+    });
   });
 });

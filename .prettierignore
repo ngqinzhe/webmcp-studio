@@ -3,3 +3,4 @@ node_modules
 graphify-out
 test-results
 *.lock
+/.superpowers/
