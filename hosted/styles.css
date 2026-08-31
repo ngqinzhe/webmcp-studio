@@ -826,13 +826,28 @@ textarea:focus,
 }
 
 .discovery-card.is-native .discovery-card-head::before {
-  position: absolute;
-  top: 11px;
-  left: 9px;
-  color: var(--mint-deep);
-  content: "⠿";
-  font-size: 14px;
-  line-height: 15px;
+  display: none;
+}
+
+.tool-drag-handle {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(167, 245, 210, 0.3);
+  border-radius: 5px;
+  color: var(--mint);
+  background: rgba(87, 212, 155, 0.08);
+  cursor: grab;
+  font-size: 12px;
+  line-height: 1;
+  touch-action: none;
+  user-select: none;
+}
+
+.tool-drag-handle:active {
+  cursor: grabbing;
 }
 
 .discovery-check {
@@ -840,7 +855,7 @@ textarea:focus,
   width: 17px;
   height: 17px;
   flex: 0 0 auto;
-  margin: 0 0 0 20px;
+  margin: 0;
   border: 1px solid #596269;
   border-radius: 5px;
   background: transparent;
@@ -912,6 +927,11 @@ textarea:focus,
 .discovery-card.is-potential:hover {
   transform: none;
   border-color: rgba(233, 210, 118, 0.5);
+}
+
+.discovery-card.is-dragging,
+.flow-discovery.is-dragging {
+  opacity: 0.45;
 }
 
 .discovery-card-details {
@@ -1116,6 +1136,11 @@ textarea:focus,
   background: rgba(87, 212, 155, 0.07);
 }
 
+.workflow-dropzone.is-drag-over {
+  border-color: var(--mint);
+  background: rgba(87, 212, 155, 0.12);
+}
+
 .compose-flow {
   display: grid;
   gap: 7px;
@@ -1130,7 +1155,7 @@ textarea:focus,
   position: relative;
   counter-increment: flow;
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) auto;
+  grid-template-columns: 26px 36px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   min-height: 42px;
@@ -1162,15 +1187,29 @@ textarea:focus,
   cursor: grabbing;
 }
 
-.compose-flow .flow-discovery::after {
-  position: absolute;
-  top: 50%;
-  left: 8px;
-  color: var(--faint);
-  content: "⠿";
-  font-size: 13px;
+.flow-drag-handle {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(167, 245, 210, 0.22);
+  border-radius: 6px;
+  color: var(--mint);
+  background: rgba(87, 212, 155, 0.06);
+  cursor: grab;
+  font-size: 12px;
   line-height: 1;
-  transform: translateY(-50%);
+  touch-action: none;
+  user-select: none;
+}
+
+.flow-drag-handle:active {
+  cursor: grabbing;
+}
+
+.compose-flow .flow-discovery.is-drop-target {
+  border-color: var(--mint);
+  box-shadow: 0 0 0 2px rgba(167, 245, 210, 0.12);
 }
 
 .compose-flow li strong {
@@ -1672,6 +1711,52 @@ code {
   opacity: 0;
 }
 
+.target-frame-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  padding: 28px;
+  color: var(--muted);
+  background:
+    radial-gradient(
+      circle at 50% 25%,
+      rgba(233, 210, 118, 0.08),
+      transparent 45%
+    ),
+    #0c0f14;
+  text-align: center;
+}
+
+.target-frame-fallback strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.target-frame-fallback p {
+  max-width: 390px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.target-frame-fallback a {
+  border: 1px solid rgba(233, 210, 118, 0.42);
+  border-radius: 7px;
+  padding: 9px 11px;
+  color: var(--yellow);
+  background: rgba(233, 210, 118, 0.08);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.target-frame-fallback a:hover {
+  border-color: var(--yellow);
+  background: rgba(233, 210, 118, 0.14);
+}
+
 .loading-spinner {
   width: 19px;
   height: 19px;
@@ -1697,6 +1782,10 @@ code {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+body.is-pointer-dragging {
+  user-select: none;
 }
 
 @media (max-width: 1120px) {

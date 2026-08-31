@@ -296,22 +296,8 @@ async function dragPrimitive(page: Page, name: string): Promise<void> {
   expect((await handle.count()) > 0 || draggable === "true").toBe(true);
   const source = (await handle.count()) > 0 ? handle : card;
   const target = page.locator(".dropzone-callout").first();
-  await source.scrollIntoViewIfNeeded();
   await target.scrollIntoViewIfNeeded();
-  const sourceBox = await source.boundingBox();
-  const targetBox = await target.boundingBox();
-  if (!sourceBox || !targetBox) throw new Error("Drag bounds are unavailable.");
-  await page.mouse.move(
-    sourceBox.x + sourceBox.width / 2,
-    sourceBox.y + sourceBox.height / 2,
-  );
-  await page.mouse.down();
-  await page.mouse.move(
-    targetBox.x + targetBox.width / 2,
-    targetBox.y + targetBox.height / 2,
-    { steps: 12 },
-  );
-  await page.mouse.up();
+  await source.dragTo(target);
 }
 
 async function generatedCard(page: Page, name: string) {
@@ -462,7 +448,7 @@ test.describe("hosted WebMCP Studio builder", () => {
     }
   });
 
-  test("keeps external discovery inferred and potential-only", async ({
+  test("uses fetched evidence for external discovery and shows a display-only preview", async ({
     browser,
   }) => {
     const context = await browser.newContext({
@@ -473,20 +459,23 @@ test.describe("hosted WebMCP Studio builder", () => {
       await page.goto(`${hostedBaseUrl}/`, { waitUntil: "domcontentloaded" });
       const input = page.locator("#site-url");
       await expect(input).toBeVisible();
-      await input.fill("https://example.com/catalog");
+      await input.fill("https://example.com/booking/catalog");
       await page.locator("#discover-button").click();
-      const card = page.locator("#potential-list .discovery-card").first();
-      await expect(card).toBeVisible();
-      await assertClassification(card, "inferred");
-      await expect(
-        card.getByRole("button", { name: /inject into page/i }),
-      ).toHaveCount(0);
-      await expect(page.locator("#site-status")).toContainText(
-        /potential-only|external/i,
+      // URL words alone must not create a canned catalog/travel inventory.
+      await expect(page.locator("#site-status")).not.toContainText(
+        /Inspecting .*external tools remain potential-only/i,
+        { timeout: 20_000 },
       );
-      await expect(page.locator("#target-frame")).toBeHidden();
+      await expect(page.locator("#potential-list .discovery-card")).toHaveCount(
+        0,
+        { timeout: 20_000 },
+      );
+      await expect(page.locator("#site-status")).toContainText(
+        /inferred potential tools|did not expose|inspection unavailable|external/i,
+      );
+      await expect(page.locator("#target-frame")).toBeVisible();
       await expect(page.locator("#target-preview-label")).toHaveText(
-        "potential only",
+        "external preview",
       );
     } finally {
       await context.close();

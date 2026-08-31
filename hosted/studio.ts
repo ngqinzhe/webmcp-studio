@@ -36,6 +36,7 @@ import {
   type TargetIdentity,
   type TargetRuntimeMode,
   type TargetToParentMessage,
+  type TargetToolEvidence,
   type TargetToolDescriptor,
 } from "./targets/target-runtime";
 
@@ -176,6 +177,43 @@ interface PendingInvocation {
   resolve: (value: JsonValue) => void;
   reject: (reason: unknown) => void;
   timer: number;
+}
+
+type ExternalPreviewStatus = "idle" | "checking" | "visible" | "blocked";
+
+interface ExternalPreviewState {
+  status: ExternalPreviewStatus;
+  url: string;
+  message: string;
+}
+
+interface ExternalInspectionResponse {
+  status: "inspected" | "no_tools" | "blocked" | "error";
+  url: string;
+  title: string;
+  tools: TargetToolDescriptor[];
+  frame: {
+    status: "allowed" | "blocked" | "unknown";
+    reason: string;
+  };
+  note: string;
+  error?: string;
+}
+
+type StudioDragPayload = {
+  kind: "primitive" | "workflow";
+  name: string;
+  index?: number;
+};
+
+interface PointerDragState {
+  pointerId: number;
+  pointerType: string;
+  payload: StudioDragPayload;
+  startX: number;
+  startY: number;
+  card: HTMLElement;
+  started: boolean;
 }
 
 export interface HostedStudioOptions {
@@ -484,6 +522,94 @@ function editableSchema(value: unknown): JSONSchema | null {
   return isJsonSchema(parsed) ? cloneJsonSchema(parsed) : null;
 }
 
+function externalInspectionFromJson(
+  value: unknown,
+): ExternalInspectionResponse | null {
+  if (!isRecord(value)) return null;
+  const status = value.status;
+  if (
+    status !== "inspected" &&
+    status !== "no_tools" &&
+    status !== "blocked" &&
+    status !== "error"
+  )
+    return null;
+  const frameValue = isRecord(value.frame) ? value.frame : {};
+  const frameStatus = frameValue.status;
+  if (
+    frameStatus !== "allowed" &&
+    frameStatus !== "blocked" &&
+    frameStatus !== "unknown"
+  )
+    return null;
+  const tools = Array.isArray(value.tools)
+    ? value.tools.flatMap((candidate): TargetToolDescriptor[] => {
+        if (!isRecord(candidate)) return [];
+        const name = stringValue(candidate.name).trim();
+        const description = stringValue(candidate.description).trim();
+        const inputSchema = editableSchema(candidate.inputSchema);
+        if (!name || !description || !inputSchema) return [];
+        const source =
+          candidate.source === "webmcp" ||
+          candidate.source === "dom" ||
+          candidate.source === "manual"
+            ? candidate.source
+            : "dom";
+        const evidence = Array.isArray(candidate.evidence)
+          ? candidate.evidence.flatMap((item): TargetToolEvidence[] => {
+              if (!isRecord(item)) return [];
+              const note = stringValue(item.note).trim();
+              if (!note) return [];
+              const type: TargetToolEvidence["type"] =
+                item.type === "dom" || item.type === "action"
+                  ? item.type
+                  : "manual";
+              return [
+                {
+                  type,
+                  note,
+                  ...(stringValue(item.selector)
+                    ? { selector: stringValue(item.selector) }
+                    : {}),
+                },
+              ];
+            })
+          : [];
+        return [
+          {
+            name,
+            description,
+            inputSchema,
+            annotations: isRecord(candidate.annotations)
+              ? (candidate.annotations as WebMcpToolAnnotations)
+              : {},
+            source,
+            ...(typeof candidate.confidence === "number" &&
+            Number.isFinite(candidate.confidence)
+              ? { confidence: candidate.confidence }
+              : {}),
+            ...(evidence.length > 0 ? { evidence } : {}),
+          },
+        ];
+      })
+    : [];
+  const url = stringValue(value.url).trim();
+  const note = stringValue(value.note).trim();
+  const reason = stringValue(frameValue.reason).trim();
+  if (!url || !note || !reason) return null;
+  return {
+    status,
+    url,
+    title: stringValue(value.title).trim(),
+    tools,
+    frame: { status: frameStatus, reason },
+    note,
+    ...(stringValue(value.error).trim()
+      ? { error: stringValue(value.error).trim() }
+      : {}),
+  };
+}
+
 function materializeSchemaDefaults(
   value: unknown,
   schema: JSONSchema,
@@ -604,6 +730,15 @@ export class HostedStudio {
   private targetReadyResolver: (() => void) | null = null;
   private targetReadyPromise: Promise<void> = Promise.resolve();
   private targetGeneration = 0;
+  private externalPreview: ExternalPreviewState = {
+    status: "idle",
+    url: "",
+    message: "",
+  };
+  private externalPreviewTimer: number | null = null;
+  private activeDrag: StudioDragPayload | null = null;
+  private pointerDrag: PointerDragState | null = null;
+  private pointerDropRow: HTMLElement | null = null;
 
   constructor(options: HostedStudioOptions = {}) {
     this.documentValue = options.document ?? document;
@@ -620,10 +755,9 @@ export class HostedStudio {
 
   start(): void {
     this.pageWindow.addEventListener("message", this.messageListener);
-    this.targetFrame.addEventListener("load", () => {
-      this.hideTargetLoading(false);
-      this.requestTargetTools();
-    });
+    this.targetFrame.addEventListener("load", () =>
+      this.handleTargetFrameLoad(),
+    );
     this.bindUi();
     void this.registerStudioTools();
     this.updateNativeStatus();
@@ -631,6 +765,8 @@ export class HostedStudio {
   }
 
   stop(): void {
+    this.cancelPointerDrag();
+    this.clearExternalPreviewTimer();
     this.nativeAbort.abort();
     for (const controller of this.registrationControllers.values())
       if (controller !== this.nativeAbort) controller.abort();
@@ -705,38 +841,75 @@ export class HostedStudio {
     });
     discoveryList?.addEventListener("dragstart", (event) => {
       const target = event.target;
-      const card =
+      const handle =
         target instanceof Element
-          ? target.closest<HTMLElement>(".discovery-card.is-native")
+          ? target.closest<HTMLElement>("[data-drag-handle]")
           : null;
+      const card = handle?.closest<HTMLElement>(".discovery-card.is-native");
       const name = card?.dataset.name;
       if (
+        !handle ||
         !card ||
-        !card.draggable ||
+        !handle.draggable ||
         !name ||
         !this.nativeTargetTools().some((tool) => tool.name === name)
       ) {
         event.preventDefault();
         return;
       }
+      this.cancelPointerDrag();
       this.writeDragPayload(event, { kind: "primitive", name });
+    });
+    discoveryList?.addEventListener("dragend", () => this.clearDragSession());
+    discoveryList?.addEventListener("pointerdown", (event) =>
+      this.handlePointerDown(event),
+    );
+    this.documentValue.addEventListener("pointermove", (event) =>
+      this.handlePointerMove(event),
+    );
+    this.documentValue.addEventListener("pointerup", (event) =>
+      this.handlePointerUp(event),
+    );
+    this.documentValue.addEventListener("pointercancel", () =>
+      this.cancelPointerDrag(),
+    );
+    this.documentValue.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") this.cancelPointerDrag();
     });
     const flow = optionalElement<HTMLElement>(
       this.documentValue,
       "compose-flow",
     );
     const dropzone = flow?.closest<HTMLElement>(".workflow-dropzone") ?? flow;
+    flow?.addEventListener("pointerdown", (event) =>
+      this.handlePointerDown(event),
+    );
+    dropzone?.addEventListener("dragenter", () => {
+      dropzone.classList.add("is-drag-over");
+    });
     dropzone?.addEventListener("dragover", (event) => {
       // DataTransfer payloads can be protected during dragover. Always claim
       // this controlled dropzone, then validate the payload on drop.
       event.preventDefault();
-      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      dropzone.classList.add("is-drag-over");
+      if (event.dataTransfer)
+        event.dataTransfer.dropEffect =
+          this.activeDrag?.kind === "workflow" ? "move" : "copy";
+    });
+    dropzone?.addEventListener("dragleave", (event) => {
+      if (
+        event.relatedTarget instanceof Node &&
+        dropzone.contains(event.relatedTarget)
+      )
+        return;
+      dropzone.classList.remove("is-drag-over");
     });
     dropzone?.addEventListener("drop", (event) => {
       event.preventDefault();
+      dropzone.classList.remove("is-drag-over");
       const payload = this.dragPayload(event);
-      if (!payload) return;
-      this.dropPrimitive(payload, event);
+      if (payload) this.dropPrimitive(payload, event);
+      this.clearDragSession();
     });
     flow?.addEventListener("dragstart", (event) => {
       const target = event.target;
@@ -746,12 +919,14 @@ export class HostedStudio {
           : null;
       const index = row?.dataset.flowIndex;
       if (!row || index === undefined) return;
-      this.writeDragPayload(event, {
+      const payload: StudioDragPayload = {
         kind: "workflow",
         name: row.dataset.name ?? "",
         index: Number(index),
-      });
+      };
+      this.writeDragPayload(event, payload);
     });
+    flow?.addEventListener("dragend", () => this.clearDragSession());
     flow?.addEventListener("click", (event) => {
       const button = event.target;
       if (!(button instanceof HTMLButtonElement)) return;
@@ -977,6 +1152,12 @@ export class HostedStudio {
         message: "Only http and https sites can be discovered.",
       };
     const origin = pageOrigin(this.pageWindow);
+    if (origin?.startsWith("https:") && url.protocol !== "https:")
+      return {
+        kind: "invalid",
+        message:
+          "Use an https URL when analyzing an external site from Studio.",
+      };
     for (const target of Object.values(TARGETS)) {
       if (
         origin &&
@@ -1000,10 +1181,7 @@ export class HostedStudio {
       return;
     }
     if (resolution.kind === "external") {
-      this.activateExternalTarget(resolution.url);
-      if (note)
-        note.textContent =
-          "Inferred tools are potential-only. Hosted Studio will not inject into an external origin.";
+      await this.activateExternalTarget(resolution.url);
       return;
     }
     this.setSiteInputValue(resolution.url);
@@ -1030,17 +1208,23 @@ export class HostedStudio {
     this.showComposerMessage(message, error);
   }
 
-  private activateExternalTarget(rawUrl: string): void {
+  private async activateExternalTarget(rawUrl: string): Promise<void> {
     this.targetReadyResolver?.();
     this.targetReadyResolver = null;
-    this.targetGeneration += 1;
+    this.clearExternalPreviewTimer();
+    const generation = ++this.targetGeneration;
     this.unregisterGeneratedTools();
     this.unregisterPageGeneratedTools();
     this.analysisRequested = true;
     this.targetScope = "external";
-    this.potentialTools = this.analyzePotentialUrl(rawUrl);
+    this.potentialTools = [];
     this.targetTools = [];
     this.targetMode = "preview";
+    this.externalPreview = {
+      status: "checking",
+      url: rawUrl,
+      message: "Inspecting the returned page and checking its embed policy…",
+    };
     this.targetIdentity = {
       id: "external",
       name: new URL(rawUrl).hostname,
@@ -1050,13 +1234,118 @@ export class HostedStudio {
     this.draftNames = [];
     this.generated.clear();
     this.project = createProject(new URL(rawUrl).hostname);
+    this.targetFrame.title = "External site preview";
+    this.targetFrame.src = "about:blank";
     this.targetFrame.hidden = true;
-    this.hideTargetLoading(false);
+    this.hideTargetLoading(true);
+    this.externalPreviewTimer = this.pageWindow.setTimeout(() => {
+      if (
+        generation !== this.targetGeneration ||
+        this.externalPreview.status !== "checking"
+      )
+        return;
+      this.externalPreview = {
+        status: "blocked",
+        url: "",
+        message:
+          "Studio could not finish inspecting this site. No external page was opened.",
+      };
+      this.targetFrame.hidden = true;
+      this.hideTargetLoading(false);
+      this.renderAll();
+      this.showSiteMessage(this.externalPreview.message, true);
+    }, 12_000);
     this.renderAll();
     this.showSiteMessage(
-      `${this.targetIdentity.name}: ${this.potentialTools.length} inferred tool${this.potentialTools.length === 1 ? "" : "s"}. External origins are potential-only here.`,
+      `Inspecting ${this.targetIdentity.name}… external tools remain potential-only.`,
       false,
     );
+    try {
+      const inspection = await this.inspectExternalSite(rawUrl);
+      if (generation !== this.targetGeneration) return;
+      this.potentialTools = inspection.tools;
+      const finalUrl = inspection.url || rawUrl;
+      this.targetIdentity = {
+        id: "external",
+        name: inspection.title || new URL(finalUrl).hostname,
+        url: finalUrl,
+      };
+      const blocked = inspection.frame.status === "blocked";
+      this.externalPreview = {
+        status: blocked ? "blocked" : "visible",
+        url: finalUrl,
+        message: blocked
+          ? inspection.frame.reason
+          : inspection.frame.reason ||
+            "Preview loaded when the external site permits framing.",
+      };
+      this.clearExternalPreviewTimer();
+      this.targetFrame.src = finalUrl;
+      this.targetFrame.hidden = blocked;
+      this.hideTargetLoading(false);
+      this.renderAll();
+      const count = this.potentialTools.length;
+      this.showSiteMessage(
+        `${this.targetIdentity.name}: ${count} inferred potential tool${count === 1 ? "" : "s"}. ${inspection.note}${blocked ? ` ${inspection.frame.reason}` : ""}`,
+        false,
+      );
+    } catch (error) {
+      if (generation !== this.targetGeneration) return;
+      this.clearExternalPreviewTimer();
+      this.externalPreview = {
+        status: "blocked",
+        url: "",
+        message:
+          "The page could not be inspected, so Studio did not open the external URL.",
+      };
+      this.targetFrame.src = "about:blank";
+      this.targetFrame.hidden = true;
+      this.hideTargetLoading(false);
+      this.renderAll();
+      this.showSiteMessage(
+        `${this.targetIdentity.name}: inspection unavailable — ${targetErrorMessage(error)} The preview is display-only when the site permits framing.`,
+        true,
+      );
+    }
+  }
+
+  private async inspectExternalSite(
+    rawUrl: string,
+  ): Promise<ExternalInspectionResponse> {
+    let response: Response;
+    try {
+      response = await this.pageWindow.fetch("/api/analyze-external", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json",
+        },
+        body: JSON.stringify({ url: rawUrl }),
+      });
+    } catch {
+      throw new Error(
+        "The hosted inspection service could not be reached. Try again on the deployed HTTPS URL.",
+      );
+    }
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new Error("The hosted inspection service returned invalid JSON.");
+    }
+    if (!response.ok) {
+      const message =
+        isRecord(payload) && typeof payload.error === "string"
+          ? payload.error
+          : `Inspection failed with HTTP ${response.status}.`;
+      throw new Error(message);
+    }
+    const inspection = externalInspectionFromJson(payload);
+    if (!inspection)
+      throw new Error(
+        "The hosted inspection service returned an invalid result.",
+      );
+    return inspection;
   }
 
   private nativeTargetTools(): TargetToolDescriptor[] {
@@ -1067,24 +1356,162 @@ export class HostedStudio {
       : [];
   }
 
-  private writeDragPayload(
-    event: DragEvent,
-    payload: { kind: "primitive" | "workflow"; name: string; index?: number },
-  ): void {
+  private workflowDropzone(): HTMLElement | null {
+    const flow = optionalElement<HTMLElement>(
+      this.documentValue,
+      "compose-flow",
+    );
+    return flow?.closest<HTMLElement>(".workflow-dropzone") ?? flow;
+  }
+
+  private clearExternalPreviewTimer(): void {
+    if (this.externalPreviewTimer !== null) {
+      this.pageWindow.clearTimeout(this.externalPreviewTimer);
+      this.externalPreviewTimer = null;
+    }
+  }
+
+  private clearPointerDropMarker(): void {
+    this.pointerDropRow?.classList.remove("is-drop-target");
+    this.pointerDropRow = null;
+    this.workflowDropzone()?.classList.remove("is-drag-over");
+  }
+
+  private cancelPointerDrag(): void {
+    const state = this.pointerDrag;
+    if (!state) return;
+    state.card.classList.remove("is-dragging");
+    try {
+      if (state.card.hasPointerCapture(state.pointerId))
+        state.card.releasePointerCapture(state.pointerId);
+    } catch {
+      // Pointer capture can already be released by the browser on cancel.
+    }
+    this.pointerDrag = null;
+    this.clearPointerDropMarker();
+    this.documentValue.body?.classList.remove("is-pointer-dragging");
+  }
+
+  private clearDragSession(): void {
+    this.activeDrag = null;
+    this.cancelPointerDrag();
+    this.workflowDropzone()?.classList.remove("is-drag-over");
+  }
+
+  private handlePointerDown(event: PointerEvent): void {
+    if (
+      this.pointerDrag ||
+      (event.pointerType === "mouse" && event.button !== 0)
+    )
+      return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest("button, input, textarea, select, a")) return;
+    const handle = target.closest<HTMLElement>("[data-drag-handle]");
+    const card = handle?.closest<HTMLElement>(".discovery-card.is-native");
+    const row = handle?.closest<HTMLElement>(".flow-discovery");
+    const cardName = card?.dataset.name;
+    const rowName = row?.dataset.name;
+    const rowIndex = row?.dataset.flowIndex;
+    const sourceElement = card ?? row;
+    const payload = cardName
+      ? { kind: "primitive" as const, name: cardName }
+      : rowName && rowIndex !== undefined
+        ? {
+            kind: "workflow" as const,
+            name: rowName,
+            index: Number(rowIndex),
+          }
+        : null;
+    if (
+      !handle ||
+      !sourceElement ||
+      !payload ||
+      (payload.kind === "primitive" &&
+        !this.nativeTargetTools().some((tool) => tool.name === payload.name)) ||
+      (payload.kind === "workflow" &&
+        (!Number.isInteger(payload.index) ||
+          this.draftNames[payload.index] !== payload.name))
+    )
+      return;
+    this.pointerDrag = {
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+      payload,
+      startX: event.clientX,
+      startY: event.clientY,
+      card: sourceElement,
+      started: false,
+    };
+  }
+
+  private handlePointerMove(event: PointerEvent): void {
+    const state = this.pointerDrag;
+    if (!state || event.pointerId !== state.pointerId) return;
+    const distance = Math.hypot(
+      event.clientX - state.startX,
+      event.clientY - state.startY,
+    );
+    if (!state.started) {
+      if (distance < 8) return;
+      state.started = true;
+      this.activeDrag = state.payload;
+      state.card.classList.add("is-dragging");
+      this.documentValue.body?.classList.add("is-pointer-dragging");
+      try {
+        state.card.setPointerCapture(state.pointerId);
+      } catch {
+        // Some browsers only allow capture from the original handle node.
+      }
+    }
+    event.preventDefault();
+    const dropzone = this.workflowDropzone();
+    const target = this.documentValue.elementFromPoint(
+      event.clientX,
+      event.clientY,
+    );
+    if (!dropzone || !target || !dropzone.contains(target)) {
+      this.clearPointerDropMarker();
+      return;
+    }
+    dropzone.classList.add("is-drag-over");
+    this.pointerDropRow?.classList.remove("is-drop-target");
+    this.pointerDropRow = target.closest<HTMLElement>("[data-flow-index]");
+    this.pointerDropRow?.classList.add("is-drop-target");
+  }
+
+  private handlePointerUp(event: PointerEvent): void {
+    const state = this.pointerDrag;
+    if (!state || event.pointerId !== state.pointerId) return;
+    if (state.started) {
+      const target = this.documentValue.elementFromPoint(
+        event.clientX,
+        event.clientY,
+      );
+      const dropzone = this.workflowDropzone();
+      if (target && dropzone?.contains(target)) {
+        this.dropPrimitive(state.payload, { target, clientY: event.clientY });
+      }
+      event.preventDefault();
+    }
+    this.clearDragSession();
+  }
+
+  private writeDragPayload(event: DragEvent, payload: StudioDragPayload): void {
+    this.activeDrag = payload;
     if (!event.dataTransfer || !payload.name) return;
-    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.effectAllowed =
+      payload.kind === "primitive" ? "copy" : "move";
     const serialized = JSON.stringify(payload);
     event.dataTransfer.setData("application/x-webmcp-studio", serialized);
     event.dataTransfer.setData("text/plain", serialized);
   }
 
-  private dragPayload(
-    event: DragEvent,
-  ): { kind: "primitive" | "workflow"; name: string; index?: number } | null {
+  private dragPayload(event: DragEvent): StudioDragPayload | null {
     const value =
       event.dataTransfer?.getData("application/x-webmcp-studio") ||
       event.dataTransfer?.getData("text/plain");
-    if (!value) return null;
+    if (!value) return this.activeDrag;
     try {
       const parsed = JSON.parse(value) as unknown;
       if (!isRecord(parsed)) return null;
@@ -1106,8 +1533,8 @@ export class HostedStudio {
   }
 
   private dropPrimitive(
-    payload: { kind: "primitive" | "workflow"; name: string; index?: number },
-    event: DragEvent,
+    payload: StudioDragPayload,
+    location: { target: EventTarget | null; clientY: number },
   ): void {
     if (!this.nativeTargetTools().some((tool) => tool.name === payload.name)) {
       this.showComposerMessage(
@@ -1116,7 +1543,7 @@ export class HostedStudio {
       );
       return;
     }
-    const eventTarget = event.target;
+    const eventTarget = location.target;
     const targetRow =
       eventTarget instanceof Element
         ? eventTarget.closest<HTMLElement>("[data-flow-index]")
@@ -1127,7 +1554,7 @@ export class HostedStudio {
       if (Number.isInteger(targetIndex)) {
         const bounds = targetRow.getBoundingClientRect();
         insertion =
-          event.clientY > bounds.top + bounds.height / 2
+          location.clientY > bounds.top + bounds.height / 2
             ? targetIndex + 1
             : targetIndex;
       }
@@ -1603,7 +2030,7 @@ export class HostedStudio {
                 message: resolution.message,
               });
             if (resolution.kind === "external") {
-              this.activateExternalTarget(resolution.url);
+              await this.activateExternalTarget(resolution.url);
               const potential = this.potentialTools;
               const external = new URL(resolution.url);
               return asJsonValue({
@@ -1616,7 +2043,7 @@ export class HostedStudio {
                 status: "potential",
                 provenance: "inferred",
                 tools: potential,
-                note: "Potential proposals are based on available URL/interface hints and are not executable without the optional extension adapter.",
+                note: "Potential proposals are based on the fetched page source and observed interface evidence. They are not executable without the optional extension adapter.",
               });
             }
             await this.selectTarget(resolution.id);
@@ -1640,7 +2067,7 @@ export class HostedStudio {
               status: "potential",
               provenance: "inferred",
               tools: potential,
-              note: "Potential proposals are based on available URL/interface hints and are not executable without the optional extension adapter.",
+              note: "Potential proposals are based on the fetched page source and observed interface evidence. They are not executable without the optional extension adapter.",
             });
           }
           return asJsonValue({
@@ -1951,6 +2378,7 @@ export class HostedStudio {
     }
     this.targetReadyResolver?.();
     this.targetReadyResolver = null;
+    this.clearExternalPreviewTimer();
     this.unregisterGeneratedTools();
     this.unregisterPageGeneratedTools();
     this.targetId = id;
@@ -1968,6 +2396,7 @@ export class HostedStudio {
     this.targetIdentity = { id, name: config.name, url: config.path };
     this.targetTools = [];
     this.targetMode = "preview";
+    this.externalPreview = { status: "idle", url: "", message: "" };
     this.selectedNames.clear();
     this.draftNames = [];
     this.generated.clear();
@@ -2627,151 +3056,19 @@ export class HostedStudio {
         };
   }
 
-  private analyzePotentialUrl(rawUrl: string): TargetToolDescriptor[] {
-    const url = new URL(rawUrl);
-    if (url.protocol !== "http:" && url.protocol !== "https:")
-      throw new Error("Only http and https URLs can be analyzed.");
-    const fingerprint =
-      `${url.hostname}${url.pathname}${url.search}`.toLowerCase();
-    const isTravel = /flight|travel|hotel|booking|itinerary|route/.test(
-      fingerprint,
-    );
-    const isCommerce = /shop|store|product|catalog|cart|commerce|price/.test(
-      fingerprint,
-    );
-    const candidates = isTravel
-      ? [
-          {
-            name: "search_options",
-            description: "Potentially search routes or stays by trip criteria.",
-            inputSchema: {
-              type: "object" as const,
-              properties: {
-                origin: { type: "string" as const },
-                destination: { type: "string" as const },
-              },
-            },
-          },
-          {
-            name: "filter_options",
-            description:
-              "Potentially filter visible options by price or cabin.",
-            inputSchema: {
-              type: "object" as const,
-              properties: { maxPrice: { type: "number" as const } },
-            },
-          },
-          {
-            name: "inspect_option",
-            description: "Potentially inspect one route or booking option.",
-            inputSchema: {
-              type: "object" as const,
-              properties: { optionId: { type: "string" as const } },
-            },
-          },
-          {
-            name: "select_option",
-            description:
-              "Potentially select an option for the current itinerary.",
-            inputSchema: {
-              type: "object" as const,
-              properties: { optionId: { type: "string" as const } },
-            },
-          },
-        ]
-      : isCommerce
-        ? [
-            {
-              name: "search_products",
-              description: "Potentially search a product or catalog listing.",
-              inputSchema: {
-                type: "object" as const,
-                properties: { query: { type: "string" as const } },
-              },
-            },
-            {
-              name: "filter_products",
-              description:
-                "Potentially filter visible products by price or category.",
-              inputSchema: {
-                type: "object" as const,
-                properties: { maxPrice: { type: "number" as const } },
-              },
-            },
-            {
-              name: "inspect_product",
-              description: "Potentially inspect a product detail view.",
-              inputSchema: {
-                type: "object" as const,
-                properties: { productId: { type: "string" as const } },
-              },
-            },
-            {
-              name: "add_to_cart",
-              description: "Potentially add a selected product to a cart.",
-              inputSchema: {
-                type: "object" as const,
-                properties: {
-                  productId: { type: "string" as const },
-                  quantity: { type: "integer" as const, minimum: 1 },
-                },
-              },
-            },
-          ]
-        : [
-            {
-              name: "inspect_page",
-              description:
-                "Potentially inspect the page's visible content and controls.",
-              inputSchema: { type: "object" as const, properties: {} },
-            },
-            {
-              name: "search_content",
-              description:
-                "Potentially search content or results exposed by the page.",
-              inputSchema: {
-                type: "object" as const,
-                properties: { query: { type: "string" as const } },
-              },
-            },
-            {
-              name: "select_result",
-              description:
-                "Potentially select a visible result or action target.",
-              inputSchema: {
-                type: "object" as const,
-                properties: { resultId: { type: "string" as const } },
-              },
-            },
-          ];
-    return candidates.map((candidate) => ({
-      ...candidate,
-      inputSchema: candidate.inputSchema as JSONSchema,
-      annotations:
-        candidate.name === "add_to_cart" || candidate.name === "select_option"
-          ? { destructiveHint: true }
-          : { readOnlyHint: true },
-      source: "dom" as const,
-      confidence: 0.42,
-      evidence: [
-        {
-          type: "manual" as const,
-          note: `URL/interface hint from ${url.origin}${url.pathname}; confirm against the live page before use.`,
-        },
-      ],
-    }));
-  }
-
   private renderPotentialTools(): void {
     const list = element<HTMLElement>(this.documentValue, "potential-list");
     list.replaceChildren();
     list.hidden = this.potentialTools.length === 0;
     for (const tool of this.potentialTools) {
+      const isNative = discoveryProvenance(tool) === "native";
       const card = this.documentValue.createElement("article");
-      card.className = "discovery-card is-potential";
+      card.className = `discovery-card is-potential ${
+        isNative ? "is-native-declaration" : "is-inferred"
+      }`;
       card.dataset.name = tool.name;
-      card.dataset.classification = "inferred";
-      card.dataset.provenance = "inferred";
+      card.dataset.classification = isNative ? "native" : "inferred";
+      card.dataset.provenance = isNative ? "native" : "inferred";
       const head = this.documentValue.createElement("div");
       head.className = "discovery-card-head";
       const title = this.documentValue.createElement("div");
@@ -2783,12 +3080,16 @@ export class HostedStudio {
       title.append(strong, description);
       const source = this.documentValue.createElement("span");
       source.className = "source-pill potential";
-      source.textContent = "Potential only";
+      source.textContent = isNative
+        ? "Declaration · verify live"
+        : "Potential only";
       const classification = this.documentValue.createElement("span");
-      classification.className = "classification-badge badge-inferred";
-      classification.dataset.classification = "inferred";
-      classification.dataset.tone = "yellow";
-      classification.textContent = "Inferred";
+      classification.className = `classification-badge badge-${
+        isNative ? "native" : "inferred"
+      }`;
+      classification.dataset.classification = isNative ? "native" : "inferred";
+      classification.dataset.tone = isNative ? "green" : "yellow";
+      classification.textContent = isNative ? "Native" : "Inferred";
       head.append(title, classification, source);
       const details = this.documentValue.createElement("div");
       details.className = "discovery-card-details";
@@ -2800,7 +3101,7 @@ export class HostedStudio {
       confidence.textContent = `confidence ${Math.round((tool.confidence ?? 0) * 100)}%`;
       const evidence = this.documentValue.createElement("span");
       evidence.className = "evidence-chip evidence-note";
-      evidence.textContent = `evidence ${tool.evidence?.[0]?.note ?? "URL/interface hint"}`;
+      evidence.textContent = `evidence ${tool.evidence?.[0]?.note ?? "fetched page evidence"}`;
       const schemaPreview = this.documentValue.createElement("pre");
       schemaPreview.className = "discovery-schema";
       schemaPreview.textContent = text(asJsonValue(tool.inputSchema));
@@ -2816,25 +3117,39 @@ export class HostedStudio {
     this.renderPotentialTools();
     this.renderComposer();
     this.renderGenerated();
+    this.renderTargetFallback();
     this.updateComposerEligibility();
   }
 
   private renderTargetMeta(): void {
     element<HTMLElement>(this.documentValue, "target-site-name").textContent =
       this.targetIdentity.name;
-    const url = (() => {
-      try {
-        return new URL(this.targetIdentity.url, this.pageWindow.location.href)
-          .pathname;
-      } catch {
-        return this.targetIdentity.url;
-      }
-    })();
+    const url =
+      this.targetScope === "external"
+        ? this.targetIdentity.url
+        : (() => {
+            try {
+              return new URL(
+                this.targetIdentity.url,
+                this.pageWindow.location.href,
+              ).pathname;
+            } catch {
+              return this.targetIdentity.url;
+            }
+          })();
     element<HTMLElement>(this.documentValue, "target-site-url").textContent =
       url;
     const live = element<HTMLElement>(this.documentValue, "target-live-label");
-    live.textContent = this.targetMode === "native" ? "native" : "preview";
-    live.classList.toggle("is-live", this.targetMode === "native");
+    live.textContent =
+      this.targetScope === "external"
+        ? "external"
+        : this.targetMode === "native"
+          ? "native"
+          : "preview";
+    live.classList.toggle(
+      "is-live",
+      this.targetScope === "controlled" && this.targetMode === "native",
+    );
     const dot = optionalElement<HTMLElement>(
       this.documentValue,
       "target-site-dot",
@@ -2851,7 +3166,58 @@ export class HostedStudio {
       targetLabel.textContent =
         this.targetScope === "controlled"
           ? "controlled target"
-          : "potential only";
+          : "external preview";
+    this.targetFrame.title =
+      this.targetScope === "controlled"
+        ? "Live controlled target website"
+        : "External site preview";
+  }
+
+  private renderTargetFallback(): void {
+    const fallback = optionalElement<HTMLElement>(
+      this.documentValue,
+      "target-frame-fallback",
+    );
+    if (!fallback) return;
+    const blocked =
+      this.targetScope === "external" &&
+      this.externalPreview.status === "blocked";
+    fallback.hidden = !blocked;
+    if (!blocked) return;
+    const title = optionalElement<HTMLElement>(
+      this.documentValue,
+      "target-frame-fallback-title",
+    );
+    const copy = optionalElement<HTMLElement>(
+      this.documentValue,
+      "target-frame-fallback-copy",
+    );
+    const link = optionalElement<HTMLAnchorElement>(
+      this.documentValue,
+      "target-open-link",
+    );
+    if (title) title.textContent = "This site blocks an embedded preview";
+    if (copy)
+      copy.textContent =
+        this.externalPreview.message ||
+        "Open the external site in a new tab to inspect it directly.";
+    if (link) {
+      link.href = this.externalPreview.url;
+      link.hidden = !this.externalPreview.url;
+    }
+  }
+
+  private handleTargetFrameLoad(): void {
+    if (this.targetScope === "external") {
+      // Cross-origin pages cannot answer the Studio bridge. The inspection
+      // request decides whether the frame is displayable; never probe it.
+      if (this.externalPreview.status === "checking") return;
+      this.clearExternalPreviewTimer();
+      this.hideTargetLoading(false);
+      return;
+    }
+    this.hideTargetLoading(false);
+    this.requestTargetTools();
   }
 
   private renderDiscoveries(): void {
@@ -2865,10 +3231,22 @@ export class HostedStudio {
       card.dataset.name = tool.name;
       card.dataset.classification = isNative ? "native" : "inferred";
       card.dataset.provenance = isNative ? "native" : "inferred";
-      card.draggable = isNative;
+      // Keep the card's controls clickable. The dedicated handle owns native
+      // HTML5 dragging, while pointer fallback uses the same handle.
+      card.draggable = false;
       card.classList.toggle("is-selected", this.selectedNames.has(tool.name));
       const head = this.documentValue.createElement("div");
       head.className = "discovery-card-head";
+      if (isNative) {
+        const handle = this.documentValue.createElement("span");
+        handle.className = "tool-drag-handle";
+        handle.dataset.dragHandle = "true";
+        handle.draggable = true;
+        handle.setAttribute("aria-hidden", "true");
+        handle.title = "Drag this native tool to the workflow";
+        handle.textContent = "⠿";
+        head.append(handle);
+      }
       const checkbox = this.documentValue.createElement("input");
       checkbox.className = "discovery-check";
       checkbox.type = "checkbox";
@@ -2929,6 +3307,7 @@ export class HostedStudio {
       add.dataset.action = "add-to-workflow";
       add.dataset.name = tool.name;
       add.disabled = !isNative || this.draftNames.includes(tool.name);
+      add.setAttribute("aria-label", `Add ${tool.name} to workflow`);
       add.textContent = this.draftNames.includes(tool.name)
         ? "Added to workflow"
         : isNative
@@ -2948,6 +3327,29 @@ export class HostedStudio {
     }
     element<HTMLElement>(this.documentValue, "discovery-empty").hidden =
       discoveredTools.length > 0 || this.potentialTools.length > 0;
+    const emptyTitle = optionalElement<HTMLElement>(
+      this.documentValue,
+      "discovery-empty-title",
+    );
+    const emptyCopy = optionalElement<HTMLElement>(
+      this.documentValue,
+      "discovery-empty-copy",
+    );
+    if (this.analysisRequested && this.targetScope === "external") {
+      if (emptyTitle) emptyTitle.textContent = "No readable tools found";
+      if (emptyCopy)
+        emptyCopy.textContent =
+          "The fetched page did not expose WebMCP or actionable interface evidence.";
+    } else if (this.analysisRequested && discoveredTools.length === 0) {
+      if (emptyTitle) emptyTitle.textContent = "No native tools found";
+      if (emptyCopy)
+        emptyCopy.textContent =
+          "This page did not return a live WebMCP tool inventory.";
+    } else {
+      if (emptyTitle) emptyTitle.textContent = "Nothing analyzed yet";
+      if (emptyCopy)
+        emptyCopy.textContent = "Enter a domain above to see its tools.";
+    }
     const discoveryCount =
       this.targetScope === "external"
         ? `${this.potentialTools.length} inferred`
@@ -2972,6 +3374,13 @@ export class HostedStudio {
         row.draggable = true;
         row.dataset.flowIndex = String(index);
         row.dataset.name = name;
+        const handle = this.documentValue.createElement("span");
+        handle.className = "flow-drag-handle";
+        handle.dataset.dragHandle = "true";
+        handle.draggable = true;
+        handle.setAttribute("aria-hidden", "true");
+        handle.title = "Drag to reorder this workflow step";
+        handle.textContent = "⠿";
         const content = this.documentValue.createElement("div");
         const strong = this.documentValue.createElement("strong");
         strong.textContent = name;
@@ -3007,7 +3416,7 @@ export class HostedStudio {
                 : "↓";
           actions.append(button);
         }
-        row.append(content, actions);
+        row.append(handle, content, actions);
         flow.append(row);
       }
     }

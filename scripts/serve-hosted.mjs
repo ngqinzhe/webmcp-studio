@@ -4,6 +4,7 @@ import { access, readFile, realpath, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { handleExternalDiscovery } from "./external-discovery.mjs";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 4177;
@@ -34,11 +35,16 @@ const MIME_TYPES = {
 
 const COMMON_HEADERS = {
   "Cache-Control": "no-store",
+  "Content-Security-Policy":
+    "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-src 'self' https:",
   "Permissions-Policy": "tools=(self)",
   "Origin-Agent-Cluster": "?1",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "SAMEORIGIN",
+  "Cross-Origin-Resource-Policy": "same-origin",
 };
+const MAX_API_BODY_BYTES = 16_384;
 
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
@@ -153,17 +159,73 @@ function errorCode(error) {
     : undefined;
 }
 
+async function readRequestBody(request) {
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of request) {
+    const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += value.byteLength;
+    if (total > MAX_API_BODY_BYTES)
+      throw Object.assign(new Error("Request body is too large."), {
+        code: "request_too_large",
+      });
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+function requestHeaders(request) {
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(request.headers)) {
+    if (typeof value === "string") headers.set(name, value);
+  }
+  return headers;
+}
+
+async function serveExternalDiscovery(request, response) {
+  let body;
+  try {
+    body = await readRequestBody(request);
+  } catch (error) {
+    if (errorCode(error) === "request_too_large") {
+      sendText(request, response, 413, errorMessage(error));
+      return;
+    }
+    throw error;
+  }
+  const host = request.headers.host || "127.0.0.1";
+  const apiRequest = new Request(`http://${host}${request.url ?? "/"}`, {
+    method: request.method,
+    headers: requestHeaders(request),
+    body: request.method === "POST" ? body : undefined,
+  });
+  const apiResponse = await handleExternalDiscovery(apiRequest);
+  const responseBody = Buffer.from(await apiResponse.arrayBuffer());
+  sendResponse(
+    request,
+    response,
+    apiResponse.status,
+    Object.fromEntries(apiResponse.headers.entries()),
+    responseBody,
+  );
+}
+
 async function serveRequest(request, response, distRoot, realDistRoot) {
+  const pathname = requestPath(request.url);
+  if (pathname === null) {
+    sendText(request, response, 400, "Bad Request");
+    return;
+  }
+
+  if (pathname === "/api/analyze-external") {
+    await serveExternalDiscovery(request, response);
+    return;
+  }
+
   if (request.method !== "GET" && request.method !== "HEAD") {
     sendText(request, response, 405, "Method Not Allowed", {
       Allow: "GET, HEAD",
     });
-    return;
-  }
-
-  const pathname = requestPath(request.url);
-  if (pathname === null) {
-    sendText(request, response, 400, "Bad Request");
     return;
   }
 
