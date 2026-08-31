@@ -32,9 +32,8 @@ npm install
 npm run build
 ```
 
-`npm run build` type-checks the project, builds the optional extension, and
-builds the hosted site. The hosted portion emits a static `dist/` tree similar
-to:
+`npm run build` type-checks the project and builds the hosted site. The hosted
+portion emits a static `dist/` tree similar to:
 
 ```text
 dist/index.html
@@ -46,6 +45,11 @@ dist/targets/commerce.html
 dist/targets/travel.html
 dist/server/index.js
 ```
+
+The primary build intentionally leaves out the optional extension. Run
+`npm run build:all` when you also need the separate extension bundle for
+advanced external-site instrumentation; run `npm run build` again before
+packaging the hosted deployment.
 
 For a local UI walkthrough, serve that directory as static files:
 
