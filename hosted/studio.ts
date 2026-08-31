@@ -196,20 +196,6 @@ const TARGETS: Record<TargetId, TargetConfig> = {
   },
 };
 
-const DEFAULT_COMMERCE_FLOW = [
-  "search_products",
-  "filter_products",
-  "get_product",
-  "add_to_cart",
-];
-
-const DEFAULT_TRAVEL_FLOW = [
-  "search_options",
-  "filter_options",
-  "get_details",
-  "select_option",
-];
-
 const DEFAULT_INPUT = {
   requirements: "keyboard",
   origin: "Singapore",
@@ -588,7 +574,6 @@ export class HostedStudio {
   private readonly pageWindow: Window;
   private readonly targetFrame: HTMLIFrameElement;
   private readonly nativeContext: NativeModelContext | null;
-  private readonly focusedBuilderMarkup: boolean;
   private readonly nativeAbort = new AbortController();
   private readonly nativeRegistrations = new Set<string>();
   private readonly registrationControllers = new Map<string, AbortController>();
@@ -613,9 +598,9 @@ export class HostedStudio {
   };
   private targetTools: TargetToolDescriptor[] = [];
   private potentialTools: TargetToolDescriptor[] = [];
+  private analysisRequested = false;
   private selectedNames = new Set<string>();
   private draftNames: string[] = [];
-  private demoRequested = false;
   private targetReadyResolver: (() => void) | null = null;
   private targetReadyPromise: Promise<void> = Promise.resolve();
   private targetGeneration = 0;
@@ -624,12 +609,6 @@ export class HostedStudio {
     this.documentValue = options.document ?? document;
     this.pageWindow =
       options.pageWindow ?? this.documentValue.defaultView ?? window;
-    this.focusedBuilderMarkup = Boolean(
-      optionalElement(this.documentValue, "site-form") ||
-      optionalElement(this.documentValue, "site-url") ||
-      optionalElement(this.documentValue, "inject-button") ||
-      optionalElement(this.documentValue, "test-generated-tool"),
-    );
     this.ensureSiteInput();
     this.targetFrame = this.ensureTargetFrame();
     this.nativeContext = nativeModelContext(this.documentValue);
@@ -648,7 +627,7 @@ export class HostedStudio {
     this.bindUi();
     void this.registerStudioTools();
     this.updateNativeStatus();
-    this.selectTarget("commerce");
+    this.selectTarget("commerce", false);
   }
 
   stop(): void {
@@ -672,50 +651,10 @@ export class HostedStudio {
   }
 
   private bindUi(): void {
-    this.documentValue
-      .querySelectorAll<HTMLButtonElement>("[data-target]")
-      .forEach((button) => {
-        button.addEventListener("click", () => {
-          const id = button.dataset.target;
-          if (id === "commerce" || id === "travel") this.selectTarget(id);
-        });
-      });
-    optionalElement<HTMLButtonElement>(
-      this.documentValue,
-      "demo-button",
-    )?.addEventListener("click", () => {
-      this.demoRequested = true;
-      this.documentValue
-        .querySelector(".workspace")
-        ?.scrollIntoView({ behavior: "smooth" });
-      this.applyDefaultDemoFlow();
-    });
-    optionalElement<HTMLButtonElement>(
-      this.documentValue,
-      "discover-button",
-    )?.addEventListener("click", () => {
-      if (optionalElement(this.documentValue, "site-url"))
-        void this.discoverFromSiteInput();
-      else this.requestTargetTools();
-    });
-    optionalElement<HTMLButtonElement>(
-      this.documentValue,
-      "compose-button",
-    )?.addEventListener("click", () =>
-      this.composeWorkflow(Array.from(this.selectedNames)),
-    );
     optionalElement<HTMLFormElement>(
       this.documentValue,
       "site-form",
     )?.addEventListener("submit", (event) => {
-      event.preventDefault();
-      void this.discoverFromSiteInput();
-    });
-    optionalElement<HTMLInputElement>(
-      this.documentValue,
-      "site-url",
-    )?.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" || event.isComposing) return;
       event.preventDefault();
       void this.discoverFromSiteInput();
     });
@@ -725,13 +664,6 @@ export class HostedStudio {
     )?.addEventListener("submit", (event) => {
       event.preventDefault();
       void this.generateFromForm();
-    });
-    optionalElement<HTMLFormElement>(
-      this.documentValue,
-      "external-form",
-    )?.addEventListener("submit", (event) => {
-      event.preventDefault();
-      this.showExternalDiscovery();
     });
     const discoveryList = optionalElement<HTMLElement>(
       this.documentValue,
@@ -916,7 +848,7 @@ export class HostedStudio {
       const button = this.documentValue.createElement("button");
       button.type = "submit";
       button.className = "button button-primary";
-      button.textContent = "Discover tools";
+      button.textContent = "Analyze";
       form.append(label, input, button);
       const note = this.documentValue.createElement("p");
       note.id = "site-note";
@@ -934,7 +866,7 @@ export class HostedStudio {
     } else if (!form.contains(input)) {
       form.append(input);
     }
-    input.value = input.value.trim() || TARGETS.commerce.path;
+    input.value = input.value.trim();
   }
 
   private ensureTargetFrame(): HTMLIFrameElement {
@@ -984,10 +916,6 @@ export class HostedStudio {
       help.classList.toggle("is-error", Boolean(error));
       help.setAttribute("aria-live", "polite");
     }
-  }
-
-  private hasFocusedControls(): boolean {
-    return this.focusedBuilderMarkup;
   }
 
   private siteInputValue(): string {
@@ -1057,6 +985,8 @@ export class HostedStudio {
       )
         return { kind: "controlled", id: target.id, url: target.path };
     }
+    if (origin && url.origin === origin && url.pathname === "/")
+      return { kind: "controlled", id: "commerce", url: TARGETS.commerce.path };
     return { kind: "external", url: url.href };
   }
 
@@ -1073,7 +1003,7 @@ export class HostedStudio {
       this.activateExternalTarget(resolution.url);
       if (note)
         note.textContent =
-          "Potential / inferred capabilities only. Hosted Studio will not inject into a third-party origin; use the optional extension adapter there.";
+          "Inferred tools are potential-only. Hosted Studio will not inject into an external origin.";
       return;
     }
     this.setSiteInputValue(resolution.url);
@@ -1083,6 +1013,7 @@ export class HostedStudio {
       note.textContent =
         "Live controlled target selected. Discovering page-native WebMCP primitives…";
     await this.selectTarget(resolution.id);
+    this.renderAll();
     this.requestTargetTools();
   }
 
@@ -1102,8 +1033,10 @@ export class HostedStudio {
   private activateExternalTarget(rawUrl: string): void {
     this.targetReadyResolver?.();
     this.targetReadyResolver = null;
+    this.targetGeneration += 1;
     this.unregisterGeneratedTools();
     this.unregisterPageGeneratedTools();
+    this.analysisRequested = true;
     this.targetScope = "external";
     this.potentialTools = this.analyzePotentialUrl(rawUrl);
     this.targetTools = [];
@@ -1121,10 +1054,9 @@ export class HostedStudio {
     this.hideTargetLoading(false);
     this.renderAll();
     this.showSiteMessage(
-      `${this.targetIdentity.name}: ${this.potentialTools.length} inferred proposal${this.potentialTools.length === 1 ? "" : "s"}. This origin is potential-only and cannot be injected by hosted Studio.`,
+      `${this.targetIdentity.name}: ${this.potentialTools.length} inferred tool${this.potentialTools.length === 1 ? "" : "s"}. External origins are potential-only here.`,
       false,
     );
-    this.setPipeline("discover");
   }
 
   private nativeTargetTools(): TargetToolDescriptor[] {
@@ -1274,7 +1206,6 @@ export class HostedStudio {
     this.renderDiscoveries();
     this.renderComposer();
     this.updateComposerEligibility();
-    this.setPipeline(this.draftNames.length > 0 ? "compose" : "discover");
     if (message) this.showComposerMessage(message, false);
     return true;
   }
@@ -1461,7 +1392,6 @@ export class HostedStudio {
                   ? "The target accepted the generated handler, but native WebMCP is unavailable. Test it as a preview."
                   : "The generated tool is registered on the target page's native WebMCP context.",
             });
-            this.setPipeline("generate");
             return true;
           }
           const reason =
@@ -1494,7 +1424,6 @@ export class HostedStudio {
           mode: "native",
           message: "Registered on the target page's native WebMCP context.",
         });
-        this.setPipeline("generate");
         return true;
       }
     }
@@ -1584,7 +1513,7 @@ export class HostedStudio {
     }
     if (generated.publication.status !== "injected") {
       const injected = await this.injectGeneratedTool(name);
-      if (!injected && this.hasFocusedControls()) {
+      if (!injected) {
         this.showComposerMessage(
           generated.publication.message ??
             "Inject the generated tool into the target page before testing it.",
@@ -1599,7 +1528,6 @@ export class HostedStudio {
       ...current.publication,
       status: "testing",
     });
-    this.setPipeline("test");
     const input = this.defaultInputForTarget();
     let result: JsonValue | null = null;
     try {
@@ -1609,7 +1537,6 @@ export class HostedStudio {
       if (result === null)
         result = errorResult(name, targetErrorMessage(error));
     }
-    this.renderTraceFromValue(result);
     const latest = this.generated.get(name);
     if (latest) {
       const succeeded = isRecord(result) && result.success === true;
@@ -1629,6 +1556,13 @@ export class HostedStudio {
             }),
       });
     }
+    if (isRecord(result) && result.success === true)
+      this.showComposerMessage("Test passed — the target page updated.", false);
+    else
+      this.showComposerMessage(
+        targetErrorMessage(isRecord(result) ? result.error : result),
+        true,
+      );
   }
 
   private async registerStudioTools(): Promise<void> {
@@ -2009,9 +1943,12 @@ export class HostedStudio {
     }
   }
 
-  private selectTarget(id: TargetId): Promise<void> {
-    if (id === this.targetId && this.targetTools.length > 0)
+  private selectTarget(id: TargetId, shouldAnalyze = true): Promise<void> {
+    this.analysisRequested = shouldAnalyze;
+    if (id === this.targetId && this.targetTools.length > 0) {
+      this.renderAll();
       return Promise.resolve();
+    }
     this.targetReadyResolver?.();
     this.targetReadyResolver = null;
     this.unregisterGeneratedTools();
@@ -2039,15 +1976,8 @@ export class HostedStudio {
     );
     this.targetFrame.src = config.path;
     this.targetFrame.hidden = false;
-    this.setSiteInputValue(config.path);
     this.hideTargetLoading(true);
     this.renderAll();
-    this.documentValue
-      .querySelectorAll<HTMLElement>("[data-target]")
-      .forEach((button) => {
-        button.classList.toggle("is-active", button.dataset.target === id);
-      });
-    this.setPipeline("discover");
     return this.targetReadyPromise;
   }
 
@@ -2079,6 +2009,7 @@ export class HostedStudio {
     const message = event.data;
     if (message.type === "target-ready") {
       if (message.target.id !== this.targetId) return;
+      if (this.targetScope !== "controlled") return;
       this.targetScope = "controlled";
       this.targetIdentity = message.target;
       this.targetMode = message.mode;
@@ -2093,13 +2024,12 @@ export class HostedStudio {
       this.targetReadyResolver = null;
       this.hideTargetLoading(false);
       this.targetFrame.hidden = false;
-      this.setSiteInputValue(TARGETS[this.targetId].path);
       this.renderAll();
-      this.showSiteMessage(
-        `${this.targetIdentity.name}: ${this.targetTools.length} Native WebMCP primitive${this.targetTools.length === 1 ? "" : "s"} discovered${this.targetMode === "native" ? " and live" : " · preview only"}.`,
-        false,
-      );
-      if (this.demoRequested) this.applyDefaultDemoFlow();
+      if (this.analysisRequested)
+        this.showSiteMessage(
+          `${this.targetIdentity.name}: ${this.targetTools.length} Native WebMCP primitive${this.targetTools.length === 1 ? "" : "s"} discovered${this.targetMode === "native" ? " and live" : " · preview only"}.`,
+          false,
+        );
       return;
     }
     const pending = this.pending.get(message.requestId);
@@ -2435,8 +2365,7 @@ export class HostedStudio {
       );
       return;
     }
-    this.showComposerMessage(`Generated ${name} for this session.`, false);
-    this.setPipeline("generate");
+    this.showComposerMessage(`Saved ${name} for this session.`, false);
     this.renderGenerated();
   }
 
@@ -2681,8 +2610,6 @@ export class HostedStudio {
       response.error = { code: result.status, message };
     }
     const output = asJsonValue(response);
-    this.renderTrace(trace, output);
-    if (result.success) this.setPipeline("execute");
     return output;
   }
 
@@ -2698,21 +2625,6 @@ export class HostedStudio {
           destination: DEFAULT_INPUT.destination,
           max_price: 500,
         };
-  }
-
-  private applyDefaultDemoFlow(): void {
-    if (this.targetTools.length === 0) return;
-    const preferred =
-      this.targetId === "commerce"
-        ? DEFAULT_COMMERCE_FLOW
-        : DEFAULT_TRAVEL_FLOW;
-    this.selectedNames = new Set(
-      preferred.filter((name) =>
-        this.targetTools.some((tool) => tool.name === name),
-      ),
-    );
-    this.renderDiscoveries();
-    this.composeWorkflow(preferred);
   }
 
   private analyzePotentialUrl(rawUrl: string): TargetToolDescriptor[] {
@@ -2898,22 +2810,6 @@ export class HostedStudio {
     }
   }
 
-  private showExternalDiscovery(): void {
-    const input = element<HTMLInputElement>(this.documentValue, "external-url");
-    const note = element<HTMLElement>(this.documentValue, "external-note");
-    try {
-      const url = new URL(input.value.trim());
-      this.potentialTools = this.analyzePotentialUrl(url.href);
-      this.renderPotentialTools();
-      note.textContent = `${url.origin} produced ${this.potentialTools.length} potential proposal${this.potentialTools.length === 1 ? "" : "s"} from URL/interface hints. It is not executable here; hosted Studio will not inject into it.`;
-    } catch {
-      this.potentialTools = [];
-      this.renderPotentialTools();
-      note.textContent =
-        "Enter an http or https URL to inspect it as potential-only.";
-    }
-  }
-
   private renderAll(): void {
     this.renderTargetMeta();
     this.renderDiscoveries();
@@ -2956,14 +2852,13 @@ export class HostedStudio {
         this.targetScope === "controlled"
           ? "controlled target"
           : "potential only";
-    element<HTMLElement>(this.documentValue, "target-tool-count").textContent =
-      `${this.targetTools.length} primitive${this.targetTools.length === 1 ? "" : "s"}`;
   }
 
   private renderDiscoveries(): void {
     const list = element<HTMLElement>(this.documentValue, "discovery-list");
     list.replaceChildren();
-    for (const tool of this.targetTools) {
+    const discoveredTools = this.analysisRequested ? this.targetTools : [];
+    for (const tool of discoveredTools) {
       const isNative = discoveryProvenance(tool) === "native";
       const card = this.documentValue.createElement("article");
       card.className = `discovery-card ${isNative ? "is-native" : "is-inferred"}`;
@@ -3052,9 +2947,13 @@ export class HostedStudio {
       list.append(card);
     }
     element<HTMLElement>(this.documentValue, "discovery-empty").hidden =
-      this.targetTools.length > 0;
+      discoveredTools.length > 0 || this.potentialTools.length > 0;
+    const discoveryCount =
+      this.targetScope === "external"
+        ? `${this.potentialTools.length} inferred`
+        : `${discoveredTools.length} found`;
     element<HTMLElement>(this.documentValue, "discovery-count").textContent =
-      `${this.targetTools.length} found`;
+      discoveryCount;
   }
 
   private renderComposer(): void {
@@ -3063,7 +2962,8 @@ export class HostedStudio {
     if (this.draftNames.length === 0) {
       const placeholder = this.documentValue.createElement("li");
       placeholder.className = "flow-placeholder";
-      placeholder.textContent = "Select primitives above to start composing.";
+      placeholder.textContent =
+        "Drag a native tool from the discovery library to start.";
       flow.append(placeholder);
     } else {
       for (const [index, name] of this.draftNames.entries()) {
@@ -3187,7 +3087,7 @@ export class HostedStudio {
     if (this.generated.size === 0) {
       const empty = this.documentValue.createElement("div");
       empty.className = "empty-panel compact";
-      empty.textContent = "Nothing generated yet.";
+      empty.textContent = "Save a workflow to see it here.";
       list.append(empty);
     }
     const injectedCount = Array.from(this.generated.values()).filter(
@@ -3239,7 +3139,7 @@ export class HostedStudio {
         ? latestTool.publication.mode === "native"
           ? "Registered on the target page. Test the same WebMCP handler an agent can invoke."
           : "Native WebMCP is unavailable in this browser. Run the controlled preview; it uses the same workflow and visible page effects."
-        : "Generate a tool first. The generated card below keeps the page publication and test actions visible.";
+        : "Save a tool first. Its page publication and test actions will appear here.";
     }
   }
 
@@ -3255,75 +3155,7 @@ export class HostedStudio {
     return "draft";
   }
 
-  private renderTrace(trace: readonly TraceStep[], result: JsonValue): void {
-    const list = element<HTMLOListElement>(
-      this.documentValue,
-      "execution-trace",
-    );
-    list.replaceChildren();
-    for (const step of trace) {
-      const row = this.documentValue.createElement("li");
-      row.className =
-        step.status === "completed" ? "trace-completed" : "trace-failed";
-      const icon = this.documentValue.createElement("span");
-      icon.className = "trace-icon";
-      icon.textContent = step.status === "completed" ? "✓" : "×";
-      const name = this.documentValue.createElement("span");
-      name.className = "trace-name";
-      name.textContent = step.name;
-      const kind = this.documentValue.createElement("span");
-      kind.className = "trace-kind";
-      kind.textContent = step.error ?? "completed";
-      row.append(icon, name, kind);
-      list.append(row);
-    }
-    if (trace.length === 0) {
-      const empty = this.documentValue.createElement("li");
-      empty.className = "trace-empty";
-      empty.textContent = "No primitive calls were made.";
-      list.append(empty);
-    }
-    const success = isRecord(result) && result.success === true;
-    const status = element<HTMLElement>(this.documentValue, "trace-status");
-    status.textContent = success ? "completed" : "failed";
-    element<HTMLElement>(this.documentValue, "trace-rail-fill").style.width =
-      `${trace.length === 0 ? 0 : Math.round((trace.filter((step) => step.status === "completed").length / trace.length) * 100)}%`;
-    const resultBox = element<HTMLElement>(
-      this.documentValue,
-      "execution-result",
-    );
-    resultBox.hidden = false;
-    resultBox.classList.toggle("error", !success);
-    resultBox.textContent = text(result);
-  }
-
-  private renderTraceFromValue(value: JsonValue): void {
-    const trace =
-      isRecord(value) && Array.isArray(value.trace)
-        ? value.trace.flatMap((entry): TraceStep[] => {
-            if (!isRecord(entry) || typeof entry.name !== "string") return [];
-            return [
-              {
-                name: entry.name,
-                status: entry.status === "completed" ? "completed" : "failed",
-                ...(isJsonValue(entry.output) ? { output: entry.output } : {}),
-                ...(typeof entry.error === "string"
-                  ? { error: entry.error }
-                  : {}),
-              },
-            ];
-          })
-        : [];
-    this.renderTrace(trace, value);
-  }
-
   private updateComposerEligibility(): void {
-    const hasSelection = this.selectedNames.size > 0;
-    const compose = element<HTMLButtonElement>(
-      this.documentValue,
-      "compose-button",
-    );
-    compose.disabled = !hasSelection;
     const generate = element<HTMLButtonElement>(
       this.documentValue,
       "generate-button",
@@ -3377,20 +3209,6 @@ export class HostedStudio {
       "is-hidden",
       !loading,
     );
-  }
-
-  private setPipeline(
-    step: "discover" | "compose" | "generate" | "test" | "execute",
-  ): void {
-    const order = ["discover", "compose", "generate", "test", "execute"];
-    const current = order.indexOf(step);
-    this.documentValue
-      .querySelectorAll<HTMLElement>("[data-pipeline-step]")
-      .forEach((node) => {
-        const index = order.indexOf(node.dataset.pipelineStep ?? "");
-        node.classList.toggle("is-active", index === current);
-        node.classList.toggle("is-complete", index < current);
-      });
   }
 }
 
