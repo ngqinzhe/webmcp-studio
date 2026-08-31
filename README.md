@@ -1,11 +1,9 @@
 # WebMCP Studio
 
-WebMCP Studio turns websites into agent-native interfaces: **Discover →
-Compose → Generate → Use**. The hosted Studio is the primary product and is
-designed to work from one public HTTPS URL in a WebMCP-capable ChatGPT
-browser. The Chrome MV3 extension remains an optional advanced adapter for
-instrumenting eligible external sites; it is not part of the hackathon judging
-path.
+WebMCP Studio turns websites into agent-native interfaces. The hosted Studio
+is the primary product and is designed to work from one public HTTPS URL in a
+WebMCP-capable ChatGPT browser. The Chrome MV3 extension remains an optional
+advanced adapter for instrumenting eligible external sites.
 
 ## Project plan
 
@@ -25,19 +23,18 @@ Open the deployed `https://<studio-domain>/` URL in ChatGPT's WebMCP-capable
 browser. This is the complete first-run path: no extension installation,
 cloning, API key, account, terminal, or configuration is required.
 
-1. Click **Try the 60-second demo** (or enter `/targets/commerce.html` in
-   **Site or domain**).
-2. Click **Discover tools** and look for the five green **Native** cards,
-   including `view_cart`. The focused example uses `search_products`,
-   `filter_products`, `get_product`, and `add_to_cart`.
+1. Enter `/targets/commerce.html` in **Target website or domain** and click
+   **Analyze**.
+2. Look for the five green **Native** cards, including `view_cart`. Yellow
+   **Inferred** cards are potential-only suggestions. The example workflow
+   uses `search_products`, `filter_products`, `get_product`, and `add_to_cart`.
 3. Drag those cards into the workflow canvas, keep the name
-   `buy_best_product`, and click **Generate tool**.
+   `buy_best_product`, and click **Save tool**.
 4. Click **Inject into page**, then **Test WebMCP**. If the browser does not
    expose native WebMCP, the honest fallback is **Run preview**.
 5. In a native WebMCP browser, ask ChatGPT to use `buy_best_product` with
-   requirements `keyboard` and max price `200`. Watch the trace resolve the
-   primitive calls and confirm that Northstar Supply visibly narrows to the
-   selected product and the cart count becomes `1`.
+   requirements `keyboard` and max price `200`. Confirm that Northstar Supply
+   visibly narrows to the selected product and the cart count becomes `1`.
 
 The header must say **WebMCP live** before a run is described as native
 WebMCP evidence. **Preview only** keeps discovery, composition, and the local

@@ -245,12 +245,10 @@ async function targetFrameFor(page: Page, pathname: string): Promise<Frame> {
 }
 
 async function discoverSite(page: Page, url: string): Promise<void> {
-  const input = page.getByLabel(/site or domain/i).first();
+  const input = page.locator("#site-url");
   await expect(input).toBeVisible();
   await input.fill(url);
-  const discover = page
-    .getByRole("button", { name: /discover tools/i })
-    .first();
+  const discover = page.locator("#discover-button");
   await expect(discover).toBeEnabled();
   await discover.click();
   await expect(
@@ -359,7 +357,7 @@ test.afterAll(async () => {
   await stopHostedServer();
 });
 
-test.describe("hosted WebMCP Studio focused builder", () => {
+test.describe("hosted WebMCP Studio builder", () => {
   test.describe.configure({ mode: "serial", timeout: 60_000 });
 
   test("discovers, composes, injects, and tests a generated page tool without an extension", async ({
@@ -374,6 +372,14 @@ test.describe("hosted WebMCP Studio focused builder", () => {
       await page.goto(`${hostedBaseUrl}/`, { waitUntil: "domcontentloaded" });
       await expect(page).toHaveTitle(/WebMCP Studio/i);
       await expect.poll(() => context.serviceWorkers()).toHaveLength(0);
+      await expect(page.locator(".pipeline")).toHaveCount(0);
+      await expect(page.getByText(/OpenAI WebMCP Hackathon/i)).toHaveCount(0);
+      await expect(
+        page.getByText(/focused builder|one useful tool out/i),
+      ).toHaveCount(0);
+      await expect(page.locator("#execution-trace, #trace-status")).toHaveCount(
+        0,
+      );
 
       for (const name of [
         "discover_site_tools",
@@ -395,10 +401,11 @@ test.describe("hosted WebMCP Studio focused builder", () => {
         "get_product",
         "add_to_cart",
       ];
+      const discoveredNames = [...primitiveNames, "view_cart"];
       await expect(page.locator("#discovery-list .discovery-card")).toHaveCount(
-        5,
+        discoveredNames.length,
       );
-      for (const name of primitiveNames) {
+      for (const name of discoveredNames) {
         const card = discoveryCard(page, name);
         await assertClassification(card, "native");
       }
@@ -417,10 +424,10 @@ test.describe("hosted WebMCP Studio focused builder", () => {
         page.locator("#compose-flow .flow-discovery strong"),
       ).toHaveText(primitiveNames);
 
-      const nameInput = page.getByLabel("Tool name");
+      const nameInput = page.locator("#tool-name");
       await nameInput.fill("buy_best_product");
       await expect.poll(() => nameInput.inputValue()).toBe("buy_best_product");
-      await page.getByRole("button", { name: /generate tool/i }).click();
+      await page.locator("#generate-button").click();
       const generated = await generatedCard(page, "buy_best_product");
       await waitForModelContextTool(page, "buy_best_product");
       await expect(generated).toContainText("awaiting page publication");
@@ -437,11 +444,8 @@ test.describe("hosted WebMCP Studio focused builder", () => {
       await expect(generated).toContainText("injected · native");
 
       await clickPageAction(page, generated, /^test webmcp$/i);
-      await expect(page.locator("#trace-status")).toHaveText("completed");
-      const completedTrace = page.locator("#execution-trace .trace-completed");
-      await expect(completedTrace).toHaveCount(primitiveNames.length);
-      await expect(completedTrace.locator(".trace-name")).toHaveText(
-        primitiveNames,
+      await expect(page.locator("#composer-message")).toContainText(
+        /test passed/i,
       );
 
       await expect(target.locator("#details")).toBeVisible({ timeout: 20_000 });
@@ -453,17 +457,6 @@ test.describe("hosted WebMCP Studio focused builder", () => {
       await expect
         .poll(() => hostExecuteToolCalls(target))
         .toContain("buy_best_product");
-      await expect
-        .poll(() =>
-          page.locator("#execution-result").evaluate((node) => {
-            try {
-              return JSON.parse(node.textContent ?? "").success === true;
-            } catch {
-              return false;
-            }
-          }),
-        )
-        .toBe(true);
     } finally {
       await context.close();
     }
@@ -478,18 +471,18 @@ test.describe("hosted WebMCP Studio focused builder", () => {
     const page = await context.newPage();
     try {
       await page.goto(`${hostedBaseUrl}/`, { waitUntil: "domcontentloaded" });
-      const input = page.getByLabel(/site or domain/i).first();
+      const input = page.locator("#site-url");
       await expect(input).toBeVisible();
       await input.fill("https://example.com/catalog");
-      await page.getByRole("button", { name: /discover tools/i }).click();
+      await page.locator("#discover-button").click();
       const card = page.locator("#potential-list .discovery-card").first();
       await expect(card).toBeVisible();
       await assertClassification(card, "inferred");
       await expect(
         card.getByRole("button", { name: /inject into page/i }),
       ).toHaveCount(0);
-      await expect(page.locator("#external-note")).toContainText(
-        /never inject/i,
+      await expect(page.locator("#site-status")).toContainText(
+        /potential-only|external/i,
       );
       await expect(page.locator("#target-frame")).toBeHidden();
       await expect(page.locator("#target-preview-label")).toHaveText(
@@ -516,15 +509,20 @@ test.describe("hosted WebMCP Studio focused builder", () => {
         "get_details",
         "select_option",
       ];
-      for (const name of primitiveNames) {
+      const discoveredNames = [...primitiveNames, "view_itinerary"];
+      await expect(page.locator("#discovery-list .discovery-card")).toHaveCount(
+        discoveredNames.length,
+      );
+      for (const name of discoveredNames)
         await assertClassification(discoveryCard(page, name), "native");
+      for (const name of primitiveNames) {
         await dragPrimitive(page, name);
       }
       await expect(page.locator("#compose-flow .flow-discovery")).toHaveCount(
         primitiveNames.length,
       );
-      await page.getByLabel("Tool name").fill("find_best_route");
-      await page.getByRole("button", { name: /generate tool/i }).click();
+      await page.locator("#tool-name").fill("find_best_route");
+      await page.locator("#generate-button").click();
       const generated = await generatedCard(page, "find_best_route");
       const inject = generated.getByRole("button", {
         name: /inject into page/i,
@@ -532,11 +530,9 @@ test.describe("hosted WebMCP Studio focused builder", () => {
       if (await inject.count()) await inject.click();
       await clickPageAction(page, generated, /run preview/i);
 
-      await expect(page.locator("#trace-status")).toHaveText("completed");
-      const trace = page.locator("#execution-trace .trace-completed");
-      await expect(trace).toHaveCount(primitiveNames.length);
-      for (const name of primitiveNames)
-        await expect(trace.filter({ hasText: name })).toBeVisible();
+      await expect(page.locator("#composer-message")).toContainText(
+        /test passed/i,
+      );
       const target = await targetFrameFor(page, "/targets/travel.html");
       await expect(target.locator("#details")).toBeVisible({ timeout: 20_000 });
       await expect(target.locator("#details-route")).toContainText(

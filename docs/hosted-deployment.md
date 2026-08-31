@@ -11,25 +11,26 @@ Before publishing a URL, confirm that a clean browser session can:
 
 1. Open the HTTPS Studio URL without an account, API key, extension, or local
    configuration.
-2. Enter `/targets/commerce.html` (or the public controlled URL) in **Site or
-   domain** and click **Discover tools**.
+2. Enter `/targets/commerce.html` (or the public controlled URL) in **Target
+   website or domain** and click **Analyze**.
 3. See discovered cards labelled **Native** in green. If potential interface
    suggestions are shown, they must be labelled **Inferred** in yellow and kept
    out of the executable workflow.
 4. Drag `search_products`, `filter_products`, `get_product`, and `add_to_cart`
-   into the workflow, name it `buy_best_product`, and click **Generate tool**.
+   into the right-hand workflow canvas, name it `buy_best_product`, and click
+   **Save tool**.
 5. Click **Inject into page**. In a supported WebMCP host, confirm that the
    target page's `document.modelContext` now contains `buy_best_product`.
-6. Click **Test WebMCP** and confirm the trace reaches every primitive and the
-   target page changes, including the cart count becoming `1`.
+6. Click **Test WebMCP** and confirm the target page changes, including the
+   cart count becoming `1`.
 
 When native WebMCP is unavailable, the final action must be labelled **Run
 preview**. A preview validates the controlled workflow and visible page effect,
 but it is not evidence that ChatGPT discovered or invoked a native tool.
 
-The intended 60-second judge path is:
+The intended judge path is:
 
-`Site or domain → Discover tools → Native primitives → drag workflow → Generate tool → Inject into page → Test WebMCP`
+`Target website → Analyze → Native primitives → drag workflow → Save tool → Inject into page → Test WebMCP`
 
 Use **Preview only** as a useful fallback for unsupported browsers, but do not
 count a preview handler or a direct page-local test as proof that ChatGPT
@@ -74,7 +75,7 @@ production security headers and is not a substitute for the public HTTPS
 judge check. `npm run demo` serves the older extension fixtures on port 4173;
 it is intentionally separate from the hosted shell.
 
-Focused-builder verification:
+Hosted UI verification:
 
 ```bash
 npm run build
@@ -171,9 +172,9 @@ JSON-safe generated descriptor and structured workflow identity to the selected
 controlled target. The target registers that descriptor with its own
 `document.modelContext`; the handler resolves the existing workflow runtime and
 primitive bridge. **Test WebMCP** invokes that page registration with the
-deterministic demo input, so the trace and visible state change come from the
-same page-facing handler an agent would use. Registration is session-scoped and
-is invalidated when the target changes or the page is reloaded.
+deterministic input, so the visible state change comes from the same
+page-facing handler an agent would use. Registration is session-scoped and is
+invalidated when the target changes or the page is reloaded.
 
 Injection is not arbitrary JavaScript injection. It is available only for the
 controlled same-origin targets. The hosted Studio never publishes a generated
@@ -269,9 +270,10 @@ commerce/travel demo.
 - **Target not discovered:** confirm `/targets/commerce.html` or
   `/targets/travel.html` is served from the same origin, that the target script
   loaded, and that no proxy stripped the target's script or frame headers.
-- **Target calls fail:** inspect the visible execution trace. The runtime
-  validates typed input and stops at the first primitive error; fix the input
-  or reload the clean session rather than retrying an uncertain mutating call.
+- **Target calls fail:** read the status message under the workflow controls.
+  The runtime validates typed input and stops at the first primitive error; fix
+  the input or reload the clean session rather than retrying an uncertain
+  mutating call.
 - **Inject into page is unavailable:** confirm that the selected target is one
   of the same-origin controlled paths and that a generated workflow exists.
   External URLs are intentionally potential-only; unsupported native hosts use
