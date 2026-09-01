@@ -183,6 +183,16 @@ interface TraceStep {
   error?: string;
 }
 
+interface ExecutionStatusSummary {
+  status: "running" | "success" | "error";
+  toolName: string;
+  completedSteps: number;
+  totalSteps: number;
+  stateChanged: boolean;
+  surface: "interactive snapshot" | "controlled target" | "live target";
+  message: string;
+}
+
 interface PendingInvocation {
   resolve: (value: JsonValue) => void;
   reject: (reason: unknown) => void;
@@ -962,6 +972,7 @@ export class HostedStudio {
   private activeDrag: StudioDragPayload | null = null;
   private pointerDrag: PointerDragState | null = null;
   private pointerDropRow: HTMLElement | null = null;
+  private executionStatus: ExecutionStatusSummary | null = null;
 
   constructor(options: HostedStudioOptions = {}) {
     this.documentValue = options.document ?? document;
@@ -1517,6 +1528,7 @@ export class HostedStudio {
       url: rawUrl,
       message: "Inspecting the returned page and checking its embed policy…",
     };
+    this.executionStatus = null;
     this.targetIdentity = {
       id: "external",
       name: new URL(rawUrl).hostname,
@@ -2344,17 +2356,27 @@ export class HostedStudio {
       const studioRuntimeMessage = generated.native
         ? "The custom tool is registered on Studio's WebMCP context."
         : "The custom tool is available in Studio preview; native WebMCP is unavailable in this browser.";
-      const message = `${studioRuntimeMessage} Run preview executes it against the interactive sanitized snapshot. Hosted Studio cannot inject into a third-party origin; live external injection needs the optional extension adapter.`;
+      const targetUrl = this.targetIdentity.url || this.externalPreview.url;
+      let opened = false;
+      try {
+        opened = Boolean(
+          targetUrl &&
+          this.pageWindow.open(targetUrl, "_blank", "noopener,noreferrer"),
+        );
+      } catch {
+        opened = false;
+      }
+      const message = opened
+        ? `${studioRuntimeMessage} Opened the live target in a new tab. Click the optional extension adapter (WebMCP Studio extension) there to inspect and inject the tool. Run preview remains available here on the interactive snapshot.`
+        : `${studioRuntimeMessage} Allow pop-ups to open the live target, then click the optional extension adapter (WebMCP Studio extension) there to inspect and inject the tool. Run preview remains available here on the interactive snapshot.`;
       this.setPublication(name, {
         ...generated.publication,
+        status: "generated",
         mode: "preview",
         message,
       });
-      this.showComposerMessage(
-        `${studioRuntimeMessage} Run preview remains enabled. Live third-party injection needs the optional extension adapter.`,
-        true,
-      );
-      return false;
+      this.showComposerMessage(message, !opened);
+      return opened;
     }
     this.setPublication(name, { status: "injecting", mode: "unavailable" });
     const requestId = randomId("generated-register");
@@ -2564,6 +2586,20 @@ export class HostedStudio {
     }
     const current = this.generated.get(name);
     if (!current) return;
+    this.executionStatus = {
+      status: "running",
+      toolName: name,
+      completedSteps: 0,
+      totalSteps: generated.primitiveNames.length,
+      stateChanged: false,
+      surface: externalPreview
+        ? "interactive snapshot"
+        : controlledPreview
+          ? "controlled target"
+          : "live target",
+      message: `Running ${name}…`,
+    };
+    this.renderExecutionStatus();
     this.setPublication(name, {
       ...current.publication,
       status: "testing",
@@ -2610,6 +2646,12 @@ export class HostedStudio {
             }),
       });
     }
+    this.recordExecutionStatus(
+      name,
+      result,
+      generated.primitiveNames.length,
+      previewRun,
+    );
     if (isRecord(result) && result.success === true) {
       this.showComposerMessage(
         previewRun
@@ -3170,6 +3212,7 @@ export class HostedStudio {
     this.targetTools = [];
     this.targetMode = "preview";
     this.externalPreview = { status: "idle", url: "", message: "" };
+    this.executionStatus = null;
     this.selectedNames.clear();
     this.draftNames = [];
     this.generated.clear();
@@ -3871,6 +3914,12 @@ export class HostedStudio {
       response.error = { code: result.status, message };
     }
     const output = asJsonValue(response);
+    this.recordExecutionStatus(
+      name,
+      output,
+      generated.primitiveNames.length,
+      this.targetScope === "external" || this.targetMode === "preview",
+    );
     return output;
   }
 
@@ -3973,8 +4022,54 @@ export class HostedStudio {
     this.renderPotentialTools();
     this.renderComposer();
     this.renderGenerated();
+    this.renderExecutionStatus();
     this.renderTargetFallback();
     this.updateComposerEligibility();
+  }
+
+  private recordExecutionStatus(
+    name: string,
+    result: JsonValue | null,
+    totalSteps: number,
+    previewRun: boolean,
+  ): void {
+    const successful = isRecord(result) && result.success === true;
+    const trace =
+      isRecord(result) && Array.isArray(result.trace) ? result.trace : [];
+    const completedSteps = trace.filter(
+      (entry) => isRecord(entry) && entry.status === "completed",
+    ).length;
+    const stateChanged = isRecord(result) && result.stateChanged === true;
+    const surface = previewRun
+      ? this.targetScope === "external"
+        ? "interactive snapshot"
+        : "controlled target"
+      : "live target";
+    const stepCount = Math.max(totalSteps, trace.length);
+    this.executionStatus = {
+      status: successful ? "success" : "error",
+      toolName: name,
+      completedSteps,
+      totalSteps: stepCount,
+      stateChanged,
+      surface,
+      message: successful
+        ? `${previewRun ? "Preview" : "WebMCP test"} executed ${name}: ${completedSteps}/${stepCount} steps complete · ${stateChanged ? "target state changed" : "completed without a detected state change"} in the ${surface}.`
+        : `${previewRun ? "Preview" : "WebMCP test"} could not complete ${name}: ${completedSteps}/${stepCount} steps complete. Read the error below and retry after fixing the workflow or target state.`,
+    };
+    this.renderExecutionStatus();
+  }
+
+  private renderExecutionStatus(): void {
+    const node = optionalElement<HTMLElement>(
+      this.documentValue,
+      "target-execution-status",
+    );
+    if (!node) return;
+    const summary = this.executionStatus;
+    node.hidden = !summary;
+    node.className = `preview-execution-status${summary ? ` is-${summary.status}` : ""}`;
+    node.textContent = summary?.message ?? "";
   }
 
   private renderTargetMeta(): void {
@@ -4373,17 +4468,16 @@ export class HostedStudio {
       inject.dataset.action = "inject-generated";
       inject.dataset.toolName = tool.name;
       inject.disabled =
-        external ||
         tool.publication.status === "injecting" ||
         tool.publication.status === "testing";
       inject.textContent = external
-        ? "Inject needs extension"
+        ? "Open extension adapter"
         : tool.publication.status === "injected"
           ? "Re-inject"
           : "Inject into page";
       if (external)
         inject.title =
-          "Third-party page injection is unavailable here. Run preview uses the interactive sanitized snapshot; use the optional extension for live instrumentation.";
+          "Open the live target in a tab, then use the optional WebMCP Studio extension to inspect and inject this saved tool. Run preview works here without the extension.";
       const test = this.documentValue.createElement("button");
       test.className = "button button-primary test-tool-button";
       test.type = "button";
@@ -4423,10 +4517,9 @@ export class HostedStudio {
       Array.from(this.generated.keys()).at(-1) ??
       stringValue(
         element<HTMLInputElement>(this.documentValue, "tool-name").value,
-        "buy_best_product",
       );
     element<HTMLElement>(this.documentValue, "agent-tool-name").textContent =
-      latest;
+      latest || "No saved tool";
     const latestTool = latest ? this.generated.get(latest) : undefined;
     const injectButton = optionalElement<HTMLButtonElement>(
       this.documentValue,
@@ -4438,17 +4531,16 @@ export class HostedStudio {
     );
     if (injectButton) {
       injectButton.disabled =
-        this.targetScope === "external" ||
         !latestTool ||
         latestTool.publication.status === "injecting" ||
         latestTool.publication.status === "testing";
       injectButton.textContent =
         this.targetScope === "external"
-          ? "Inject needs extension"
+          ? "Open extension adapter"
           : "Inject into page";
       if (this.targetScope === "external")
         injectButton.title =
-          "Third-party page injection is unavailable here. Run preview uses the interactive sanitized snapshot; use the optional extension for live instrumentation.";
+          "Open the live target in a tab, then use the optional WebMCP Studio extension to inspect and inject this saved tool. Run preview works here without the extension.";
     }
     if (testButton) {
       testButton.disabled =
@@ -4467,7 +4559,7 @@ export class HostedStudio {
     if (help) {
       help.textContent = latestTool
         ? this.targetScope === "external"
-          ? `${latestTool.native ? "Registered on Studio's WebMCP context." : "Native Studio WebMCP is unavailable in this browser; preview remains available."} Run preview executes the workflow against the interactive sanitized snapshot. Live third-party injection needs the optional extension adapter.`
+          ? `${latestTool.native ? "Registered on Studio's WebMCP context." : "Native Studio WebMCP is unavailable in this browser; preview remains available."} Run preview executes the workflow against the interactive sanitized snapshot. Open the live target and use the optional extension adapter for real third-party injection.`
           : latestTool.publication.mode === "native"
             ? "Registered on the target page. Test the same WebMCP handler an agent can invoke."
             : "Native WebMCP is unavailable in this browser. Run the controlled preview; it uses the same workflow and visible page effects."
@@ -4485,15 +4577,15 @@ export class HostedStudio {
       modeTitle.textContent =
         this.targetScope === "external"
           ? latestTool?.native
-            ? "Studio WebMCP"
-            : "Studio preview"
+            ? "Studio WebMCP + live adapter"
+            : "Studio preview + live adapter"
           : "Page WebMCP";
     if (modeCopy)
       modeCopy.textContent =
         this.targetScope === "external"
           ? latestTool?.native
-            ? "The generated tool is available to the Studio WebMCP agent. Run preview executes it on an interactive sanitized snapshot; third-party page injection needs the optional extension."
-            : "Run preview executes the generated tool on an interactive sanitized snapshot. Native Studio WebMCP is unavailable in this browser; third-party page injection needs the optional extension."
+            ? "The generated tool is available to the Studio WebMCP agent. Run preview executes it on an interactive sanitized snapshot; open the live target and use the optional extension adapter for injection."
+            : "Run preview executes the generated tool on an interactive sanitized snapshot. Open the live target and use the optional extension adapter for real third-party injection."
           : "Inject the saved tool into the selected target.";
   }
 

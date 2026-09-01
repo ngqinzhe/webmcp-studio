@@ -177,7 +177,7 @@
                     <input
                       id="tool-name"
                       name="toolName"
-                      value="buy_best_product"
+                      placeholder="e.g. buy_best_product"
                       pattern="[a-z][a-z0-9_]*"
                       maxlength="48"
                       required
@@ -190,12 +190,12 @@
                     <textarea
                       id="tool-description"
                       name="description"
+                      placeholder="e.g. Find the best matching product and add it to the cart."
                       rows="2"
                       maxlength="240"
                       required
                       aria-describedby="tool-description-help"
-                    >
-Find the best matching product and add it to the cart.</textarea>
+                    ></textarea>
                     <p id="tool-description-help" class="field-help">
                       Tell agents what this tool does and when to use it.
                     </p>
@@ -284,7 +284,7 @@ Select tools to preview the input shape.</pre>
                     <strong id="agent-callout-title">Ready for an agent</strong>
                     <p>
                       Available tool:
-                      <code id="agent-tool-name">buy_best_product</code>
+                      <code id="agent-tool-name">No saved tool</code>
                     </p>
                   </div>
                 </div>
@@ -312,6 +312,14 @@ Select tools to preview the input shape.</pre>
                 >/targets/commerce.html</span
               >
             </div>
+            <div
+              id="target-execution-status"
+              class="preview-execution-status"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              hidden
+            ></div>
             <div class="target-frame-wrap">
               <iframe
                 id="target-frame"

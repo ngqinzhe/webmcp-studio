@@ -26,7 +26,11 @@ Before publishing a URL, confirm that a clean browser session can:
 
 When native WebMCP is unavailable, the final action must be labelled **Run
 preview**. A preview validates the controlled workflow and visible page effect,
-but it is not evidence that ChatGPT discovered or invoked a native tool.
+but it is not evidence that ChatGPT discovered or invoked a native tool. For an
+external URL, the same action runs against Studio's interactive sanitized
+snapshot without the extension. The adjacent **Open extension adapter** action
+opens the live URL in a tab for the optional extension to inspect and inject the
+workflow into the real third-party page.
 
 The intended judge path is:
 
@@ -174,9 +178,11 @@ deterministic input, so the visible state change comes from the same
 page-facing handler an agent would use. Registration is session-scoped and is
 invalidated when the target changes or the page is reloaded.
 
-Injection is not arbitrary JavaScript injection. It is available only for the
-controlled same-origin targets. The hosted Studio never publishes a generated
-registration into an external origin.
+Injection is not arbitrary JavaScript injection. Direct hosted injection is
+available only for the controlled same-origin targets. For an external target,
+the hosted **Open extension adapter** action opens the URL in a browser tab and
+hands the user to the existing optional extension workflow; the hosted Studio
+itself never publishes a generated registration into an external origin.
 
 The production Worker currently emits these response policies:
 
@@ -312,8 +318,8 @@ explicitly appropriate.
   mutating call.
 - **Inject into page is unavailable:** confirm that the selected target is one
   of the same-origin controlled paths and that a generated workflow exists.
-  External URLs use **Run preview** because the hosted page cannot inject into
-  a third-party origin.
+  External URLs use **Run preview** inside the hosted snapshot; choose **Open
+  extension adapter** to open the live URL for the optional extension path.
 - **External preview:** drag either Native or Inferred cards into a workflow,
   save it, then use **Run preview** or invoke the generated tool from Studio's
   WebMCP context. The visible result is deliberately a Studio-owned snapshot;

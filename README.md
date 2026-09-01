@@ -28,11 +28,11 @@ cloning, API key, account, terminal, or configuration is required.
 2. Look for the five green **Native** cards, including `view_cart`. Yellow
    **Inferred** cards come from page evidence. Both classifications can be
    composed into a custom tool; inferred tools run in Studio's safe snapshot
-   preview, while only controlled-target tools can be injected into a live
-   page without the optional extension. The example workflow uses
-   `search_products`, `filter_products`, `get_product`, and `add_to_cart`.
-3. Drag those cards into the workflow canvas, keep the name
-   `buy_best_product`, and click **Save tool**.
+   preview, while live third-party injection remains available through the
+   optional extension adapter. The example workflow uses `search_products`,
+   `filter_products`, `get_product`, and `add_to_cart`.
+3. Drag those cards into the workflow canvas, enter your own tool name and
+   description, and click **Save tool**.
 4. Click **Inject into page**, then **Test WebMCP**. If the browser does not
    expose native WebMCP, the honest fallback is **Run preview**.
 5. In a native WebMCP browser, ask ChatGPT to use `buy_best_product` with
@@ -45,6 +45,12 @@ test useful when the browser does not expose `document.modelContext`, but it
 never pretends to be an agent connection. See the [hosted deployment
 guide](docs/hosted-deployment.md) for the production contract and browser
 checks.
+
+For an external URL, **Run preview** uses the interactive sanitized snapshot
+inside Studio and does not require the extension. **Open extension adapter**
+opens the live URL in a browser tab so the optional extension can inspect and
+inject the saved workflow into that real page. The hosted Studio cannot cross
+the browser's same-origin boundary itself.
 
 ## Local hosted preview
 

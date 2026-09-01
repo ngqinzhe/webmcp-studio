@@ -619,6 +619,22 @@ test.afterAll(async () => {
 test.describe("hosted WebMCP Studio builder", () => {
   test.describe.configure({ mode: "serial", timeout: 60_000 });
 
+  test("starts with empty custom tool name and description fields", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+    });
+    const page = await context.newPage();
+    try {
+      await page.goto(`${hostedBaseUrl}/`, { waitUntil: "domcontentloaded" });
+      await expect(page.locator("#tool-name")).toHaveValue("");
+      await expect(page.locator("#tool-description")).toHaveValue("");
+    } finally {
+      await context.close();
+    }
+  });
+
   test("exposes invokable Studio WebMCP controls on the top-level page", async ({
     browser,
   }) => {
@@ -810,6 +826,9 @@ test.describe("hosted WebMCP Studio builder", () => {
 
       const nameInput = page.locator("#tool-name");
       await nameInput.fill("buy_best_product");
+      await page
+        .locator("#tool-description")
+        .fill("Find the best matching product and add it to the cart.");
       await expect.poll(() => nameInput.inputValue()).toBe("buy_best_product");
       await page.locator("#generate-button").click();
       const generated = await generatedCard(page, "buy_best_product");
@@ -1005,6 +1024,9 @@ test.describe("hosted WebMCP Studio builder", () => {
       ).toHaveCount(tools.length);
 
       await page.locator("#tool-name").fill("buy_inferred_product");
+      await page
+        .locator("#tool-description")
+        .fill("Find a matching product and add it to the cart.");
       await expect(page.locator("#generate-button")).toBeEnabled();
       await page.locator("#generate-button").click();
 
@@ -1084,6 +1106,9 @@ test.describe("hosted WebMCP Studio builder", () => {
       for (const tool of inferredCommerceTools())
         await dragPrimitive(page, tool.name);
       await page.locator("#tool-name").fill("buy_inferred_preview");
+      await page
+        .locator("#tool-description")
+        .fill("Find a matching product and add it to the cart.");
       await page.locator("#generate-button").click();
       const generated = await generatedCard(page, "buy_inferred_preview");
 
@@ -1113,12 +1138,23 @@ test.describe("hosted WebMCP Studio builder", () => {
       await expect(
         snapshot.locator('[data-webmcp-studio-preview-tool="add_to_cart"]'),
       ).toBeVisible();
+      await expect(snapshot.locator("#cart-count")).toHaveText("2");
+
+      const executionStatus = page.locator("#target-execution-status");
+      await expect(executionStatus).toBeVisible();
+      await expect(executionStatus).toHaveClass(/is-success/);
+      await expect(executionStatus).toContainText(
+        /Preview executed buy_inferred_preview/i,
+      );
+      await expect(executionStatus).toContainText(/2\/2 steps complete/i);
+      await expect(executionStatus).toContainText(/target state changed/i);
+      await expect(executionStatus).toContainText(/interactive snapshot/i);
     } finally {
       await context.close();
     }
   });
 
-  test("keeps external page injection clearly unavailable for inferred tools", async ({
+  test("keeps external live injection available through the optional adapter path", async ({
     browser,
   }) => {
     const context = await browser.newContext({
@@ -1134,15 +1170,38 @@ test.describe("hosted WebMCP Studio builder", () => {
       for (const tool of inferredCommerceTools())
         await dragPrimitive(page, tool.name);
       await page.locator("#tool-name").fill("external_proposal");
+      await page
+        .locator("#tool-description")
+        .fill("Find a matching product and add it to the cart.");
       await page.locator("#generate-button").click();
       const generated = await generatedCard(page, "external_proposal");
 
-      await expect(page.locator("#inject-button")).toBeDisabled();
-      await expect(
-        generated.getByRole("button", { name: /Inject needs extension/i }),
-      ).toBeDisabled();
+      await expect(page.locator("#inject-button")).toBeEnabled();
+      await expect(page.locator("#inject-button")).toHaveText(
+        /extension adapter/i,
+      );
+      await expect(page.locator("#inject-button")).toHaveAttribute(
+        "title",
+        /optional .*extension|extension adapter/i,
+      );
+      const injectAction = generated.locator(
+        'button[data-action="inject-generated"]',
+      );
+      await expect(injectAction).toBeEnabled();
+      await expect(injectAction).toHaveText(/extension adapter/i);
+      await expect(injectAction).toHaveAttribute(
+        "title",
+        /optional .*extension|extension adapter/i,
+      );
       await expect(page.locator("#injection-help")).toContainText(
-        /external|potential|extension|preview/i,
+        /optional extension adapter/i,
+      );
+      await injectAction.click();
+      await expect(page.locator("#composer-message")).toContainText(
+        /optional extension adapter/i,
+      );
+      await expect(page.locator(".publication-message")).toContainText(
+        /optional extension adapter/i,
       );
       await expect(page.locator("#target-frame")).toHaveAttribute(
         "sandbox",
@@ -1225,6 +1284,10 @@ test.describe("hosted WebMCP Studio builder", () => {
       await expect(form).toHaveAttribute("novalidate", "");
       await expect(page.locator("#generate-button")).toBeEnabled();
 
+      await page.locator("#tool-name").fill("invalid_workflow");
+      await page
+        .locator("#tool-description")
+        .fill("A tool used to exercise workflow validation.");
       await page.locator("#generate-button").click();
       await expect(page.locator("#composer-message")).toContainText(
         /workflow|discovered tool|add/i,
@@ -1299,6 +1362,9 @@ test.describe("hosted WebMCP Studio builder", () => {
         primitiveNames.length,
       );
       await page.locator("#tool-name").fill("find_best_route");
+      await page
+        .locator("#tool-description")
+        .fill("Find the best route and select it for the itinerary.");
       await page.locator("#generate-button").click();
       const generated = await generatedCard(page, "find_best_route");
       await clickPageAction(page, generated, /run preview/i);

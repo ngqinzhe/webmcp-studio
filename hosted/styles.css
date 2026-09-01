@@ -1666,6 +1666,35 @@ code {
   background: rgba(13, 16, 23, 0.45);
 }
 
+.preview-execution-status {
+  margin: 0 21px 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--muted);
+  background: rgba(13, 16, 23, 0.45);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.preview-execution-status.is-running {
+  border-color: rgba(184, 180, 255, 0.35);
+  color: var(--lavender);
+  background: rgba(184, 180, 255, 0.08);
+}
+
+.preview-execution-status.is-success {
+  border-color: rgba(112, 226, 173, 0.55);
+  color: var(--mint);
+  background: rgba(87, 212, 155, 0.12);
+}
+
+.preview-execution-status.is-error {
+  border-color: rgba(255, 155, 120, 0.55);
+  color: var(--coral);
+  background: rgba(255, 155, 120, 0.08);
+}
+
 .target-meta-title {
   display: flex;
   align-items: center;
