@@ -94,6 +94,26 @@ describe("external discovery", () => {
     expect(result.previewHtml).not.toMatch(/<script|onclick=/i);
   });
 
+  test("retries inference against normalized challenge markup", () => {
+    const result = analyzeExternalHtml({
+      url: "https://reddit.example/",
+      html: `
+        <html>
+          <head><title>Prove your humanity</title></head>
+          <body>
+            <form hidden method="get">
+              <input type="hidden" name="token" />
+            </form >
+          </body>
+        </html>
+      `,
+      headers: new Headers({ "x-frame-options": "SAMEORIGIN" }),
+      studioOrigin: "https://studio.example",
+    });
+
+    expect(result.tools.map((tool) => tool.name)).toContain("submit_form");
+  });
+
   test("extracts named form fields and empty labeled controls", () => {
     const result = analyzeExternalHtml({
       url: "https://shop.example/",

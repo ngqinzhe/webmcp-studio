@@ -864,12 +864,20 @@ export function analyzeExternalHtml({
   const previewHtml = sanitizePreviewHtml(html);
   const used = new Set();
   const native = nativeToolsFromHtml(html, used);
-  const inferred = inferredToolsFromHtml(html, used);
+  const inferred = [
+    ...inferredToolsFromHtml(html, used),
+    // Some challenge pages contain permissive or slightly malformed HTML
+    // (for example whitespace in a closing tag). The bounded sanitized
+    // snapshot normalizes those tags while preserving the actionable form
+    // evidence, so retry inference against it before reporting no tools.
+    ...inferredToolsFromHtml(previewHtml, used),
+  ];
   const tools = [...native, ...inferred];
   const responseContext =
     status >= 200 && status < 300
       ? ""
       : ` The returned page was HTTP ${status}; it was analyzed as evidence only.`;
+  const notePrefix = responseContext ? `${responseContext} ` : "";
   return {
     status: tools.length > 0 ? "inspected" : "no_tools",
     url: targetUrl,
@@ -879,8 +887,8 @@ export function analyzeExternalHtml({
     previewHtml,
     note:
       tools.length > 0
-        ? `${responseContext} Inspected the returned page source: ${native.length} potential WebMCP declaration${native.length === 1 ? "" : "s"} and ${inferred.length} interface tool${inferred.length === 1 ? "" : "s"}. External results remain inferred until verified on the live page.`
-        : `${responseContext} The returned page did not expose a readable WebMCP declaration or supported actionable interface evidence.`,
+        ? `${notePrefix}Inspected the returned page source: ${native.length} potential WebMCP declaration${native.length === 1 ? "" : "s"} and ${inferred.length} interface tool${inferred.length === 1 ? "" : "s"}. External results remain inferred until verified on the live page.`
+        : `${notePrefix}The returned page did not expose a readable WebMCP declaration or supported actionable interface evidence.`,
   };
 }
 
