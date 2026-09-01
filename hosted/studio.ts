@@ -4999,7 +4999,11 @@ function hostedWorkflow(
         position: { x: index * 220, y: 0 },
         config: {
           capabilityId: primitiveName,
-          ...(Object.keys(bindings).length > 0 ? { args: bindings } : {}),
+          // An explicit empty args object is meaningful. Without it the
+          // workflow runtime forwards the generated tool input wholesale,
+          // which makes zero-input primitives such as view_cart reject
+          // unrelated fields like requirements and max_price.
+          args: bindings,
         },
       };
     },

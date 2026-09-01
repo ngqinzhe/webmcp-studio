@@ -1384,4 +1384,53 @@ test.describe("hosted WebMCP Studio builder", () => {
       await context.close();
     }
   });
+
+  test("runs a full Northstar workflow when the final primitive has no inputs", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+    });
+    const page = await context.newPage();
+    try {
+      await page.goto(`${hostedBaseUrl}/`, { waitUntil: "domcontentloaded" });
+      await discoverSite(page, `${hostedBaseUrl}/targets/commerce.html`);
+
+      const primitiveNames = [
+        "search_products",
+        "filter_products",
+        "get_product",
+        "add_to_cart",
+        "view_cart",
+      ];
+      for (const name of primitiveNames) await dragPrimitive(page, name);
+      await expect(
+        page.locator("#compose-flow .flow-discovery strong"),
+      ).toHaveText(primitiveNames);
+
+      await page.locator("#tool-name").fill("buy_best_product_with_summary");
+      await page
+        .locator("#tool-description")
+        .fill(
+          "Find the best matching product, add it to the cart, and show the cart.",
+        );
+      await page.locator("#generate-button").click();
+      const generated = await generatedCard(
+        page,
+        "buy_best_product_with_summary",
+      );
+      await clickPageAction(page, generated, /run preview/i);
+
+      await expect(page.locator("#composer-message")).toContainText(
+        /test passed/i,
+      );
+      await expect(generated).not.toContainText("needs attention");
+      const target = await targetFrameFor(page, "/targets/commerce.html");
+      await expect(target.locator("#details")).toBeVisible({ timeout: 20_000 });
+      await expect(target.locator("#details-name")).toContainText(/keyboard/i);
+      await expect(target.locator("#cart-count")).toHaveText("1");
+    } finally {
+      await context.close();
+    }
+  });
 });
