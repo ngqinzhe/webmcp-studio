@@ -60,6 +60,7 @@ interface ToolListLayoutSnapshot {
 const externalSnapshotHtml = `
 <!doctype html>
 <html>
+  <head><title>Example Catalog</title></head>
   <body>
     <h1>Example Catalog</h1>
     <form id="search-form">
@@ -67,8 +68,8 @@ const externalSnapshotHtml = `
       <button type="submit">Search</button>
     </form>
     <ul id="results">
-      <li data-product="keyboard">Mechanical keyboard</li>
-      <li data-product="mouse">Wireless mouse</li>
+      <li data-product="keyboard">Mechanical keyboard · $49</li>
+      <li data-product="mouse">Wireless mouse · $29</li>
     </ul>
     <button id="add-button" type="button">Add keyboard to cart</button>
     <span id="cart-count">0</span>
@@ -928,7 +929,7 @@ test.describe("hosted WebMCP Studio builder", () => {
     }
   });
 
-  test("saves a custom tool composed from inferred external tools", async ({
+  test("saves and executes a custom tool composed from inferred external tools", async ({
     browser,
   }) => {
     const context = await browser.newContext({
@@ -976,6 +977,36 @@ test.describe("hosted WebMCP Studio builder", () => {
       expect(listed).toMatchObject({
         tools: [expect.objectContaining({ name: "buy_inferred_product" })],
       });
+
+      const snapshot = page.frameLocator("#target-frame");
+      await expect(page.locator("#target-preview-label")).toHaveText(
+        "interactive snapshot",
+      );
+      await expect(snapshot.locator("#cart-count")).toHaveText("0");
+
+      await waitForModelContextTool(page, "execute_workflow");
+      const executed = await invokeModelContextTool(page, "execute_workflow", {
+        name: "buy_inferred_product",
+        input: { query: "keyboard", quantity: 1 },
+      });
+      expect(executed).toMatchObject({
+        success: true,
+        toolName: "buy_inferred_product",
+        stateChanged: true,
+      });
+      await expect(snapshot.locator("#cart-count")).toHaveText("1");
+      await expect
+        .poll(() => hostExecuteToolCalls(page))
+        .toContain("execute_workflow");
+      await expect(
+        snapshot.locator("#webmcp-studio-preview-status"),
+      ).toHaveText(
+        /Inferred preview ran add_to_cart on this safe page snapshot/i,
+      );
+      await expect(snapshot.locator("#add-button")).toHaveAttribute(
+        "data-webmcp-studio-preview-tool",
+        "add_to_cart",
+      );
     } finally {
       await context.close();
     }
@@ -1014,12 +1045,13 @@ test.describe("hosted WebMCP Studio builder", () => {
       const agentResult = await invokeModelContextTool(
         page,
         "buy_inferred_preview",
-        { query: "keyboard", productId: "keyboard", quantity: 1 },
+        { query: "keyboard", quantity: 1 },
       );
       expect(agentResult).toMatchObject({
         success: true,
         stateChanged: true,
       });
+      await expect(snapshot.locator("#cart-count")).toHaveText("1");
       await expect(
         snapshot.locator("#webmcp-studio-preview-status"),
       ).toContainText(/Inferred preview ran/i);

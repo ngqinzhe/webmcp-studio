@@ -22,6 +22,7 @@ const externalPreviewRuntimeSource = resolve(
   hosted,
   "external-preview-runtime.js",
 );
+const externalPreviewShellSource = resolve(hosted, "external-preview.html");
 const hostingSource = resolve(root, ".openai/hosting.json");
 const externalDiscoverySource = resolve(root, "scripts/external-discovery.mjs");
 
@@ -31,6 +32,7 @@ for (const path of [
   demo,
   externalDiscoverySource,
   externalPreviewRuntimeSource,
+  externalPreviewShellSource,
 ]) {
   if (!existsSync(path)) throw new Error(`Missing hosted build input: ${path}`);
 }
@@ -106,6 +108,15 @@ if (existsSync(studioSource)) {
     externalPreviewRuntimeSource,
     resolve(dist, "assets/external-preview-runtime.js"),
   );
+  const previewRuntime = readFileSync(
+    externalPreviewRuntimeSource,
+    "utf8",
+  ).replace(/<\/script/gi, "<\\/script");
+  const previewShell = readFileSync(externalPreviewShellSource, "utf8").replace(
+    "<!-- WEBMCP_STUDIO_PREVIEW_RUNTIME -->",
+    `<script>${previewRuntime}</script>`,
+  );
+  writeFileSync(resolve(dist, "assets/external-preview.html"), previewShell);
 } else {
   // A future hosted/studio.ts can use the existing module tag unchanged. For
   // now omit it from the emitted shell instead of shipping a broken request.
@@ -142,6 +153,7 @@ const hostedAssets = [
   ["styles.css", "text/css; charset=utf-8"],
   ["assets/studio.js", "text/javascript; charset=utf-8"],
   ["assets/external-preview-runtime.js", "text/javascript; charset=utf-8"],
+  ["assets/external-preview.html", "text/html; charset=utf-8"],
   ["assets/commerce.js", "text/javascript; charset=utf-8"],
   ["assets/travel.js", "text/javascript; charset=utf-8"],
   ["targets/commerce.html", "text/html; charset=utf-8"],
@@ -187,7 +199,12 @@ function embeddedAssetResponse(request) {
   const headers =
     pathname === "/assets/external-preview-runtime.js"
       ? { "Cross-Origin-Resource-Policy": "cross-origin" }
-      : {};
+      : pathname === "/assets/external-preview.html"
+        ? {
+            "Content-Security-Policy":
+              "default-src 'none'; base-uri 'none'; frame-ancestors 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'",
+          }
+        : {};
   return withSecurityHeaders(
     new Response(request.method === "HEAD" ? null : asset.body, {
       status: 200,

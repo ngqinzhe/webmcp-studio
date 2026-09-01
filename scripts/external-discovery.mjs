@@ -189,6 +189,31 @@ const PREVIEW_SAFE_ATTRIBUTES = new Set([
   "value",
   "wrap",
 ]);
+// Keep only non-sensitive identifiers that let the local preview associate
+// inferred evidence with visible product/option cards and cart affordances.
+// Arbitrary data-* values stay stripped so fetched page metadata cannot become
+// an unbounded data exfiltration channel in the preview.
+const PREVIEW_SAFE_DATA_ATTRIBUTES = new Set([
+  "data-cart-count",
+  "data-currency",
+  "data-flight",
+  "data-flight-id",
+  "data-hotel",
+  "data-hotel-id",
+  "data-id",
+  "data-item",
+  "data-item-id",
+  "data-option",
+  "data-option-id",
+  "data-price",
+  "data-product",
+  "data-product-id",
+  "data-property",
+  "data-property-id",
+  "data-sku",
+  "data-testid",
+  "data-value",
+]);
 const BLOCKED_HOSTNAMES = new Set([
   "localhost",
   "localhost.localdomain",
@@ -423,6 +448,7 @@ function escapePreviewAttribute(value) {
 
 function isSafePreviewAttribute(name) {
   if (name.startsWith("on") || PREVIEW_URL_ATTRIBUTES.has(name)) return false;
+  if (name.startsWith("data-")) return PREVIEW_SAFE_DATA_ATTRIBUTES.has(name);
   if (PREVIEW_SAFE_ATTRIBUTES.has(name)) return true;
   return /^aria-[a-z][a-z0-9_-]*$/.test(name);
 }

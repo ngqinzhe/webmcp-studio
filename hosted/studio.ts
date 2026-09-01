@@ -254,13 +254,20 @@ type ExternalPreviewCommand = {
   channel: typeof EXTERNAL_PREVIEW_CHANNEL;
   version: typeof EXTERNAL_PREVIEW_VERSION;
   direction: "parent-to-preview";
-  type: "invoke";
   token: string;
-  requestId: string;
-  toolName: string;
-  tool: TargetToolDescriptor;
-  args: JsonValue;
-};
+} & (
+  | {
+      type: "load";
+      html: string;
+    }
+  | {
+      type: "invoke";
+      requestId: string;
+      toolName: string;
+      tool: TargetToolDescriptor;
+      args: JsonValue;
+    }
+);
 
 type StudioDragPayload = {
   kind: "primitive" | "workflow";
@@ -501,10 +508,20 @@ function schemaProperties(schema: JSONSchema): Record<string, JSONSchema> {
 function isOutputKey(key: string): boolean {
   return (
     key === "productId" ||
+    key === "product_id" ||
     key === "flightId" ||
+    key === "flight_id" ||
     key === "optionId" ||
+    key === "option_id" ||
     key === "productIds" ||
-    key === "optionIds"
+    key === "product_ids" ||
+    key === "optionIds" ||
+    key === "option_ids" ||
+    key === "itemId" ||
+    key === "item_id" ||
+    key === "sku" ||
+    key === "id" ||
+    key === "ids"
   );
 }
 
@@ -517,9 +534,35 @@ function hasProducer(
     .slice(0, index)
     .some(
       (name) =>
-        descriptors.find((tool) => tool.name === name)?.source === "webmcp" &&
+        descriptors.some((tool) => tool.name === name) &&
         /^(search|filter|get_)/.test(name),
     );
+}
+
+function descriptorHasInput(
+  descriptor: TargetToolDescriptor | undefined,
+  key: string,
+): boolean {
+  return Boolean(descriptor?.inputSchema.properties?.[key]);
+}
+
+function descriptorInputKey(
+  descriptor: TargetToolDescriptor | undefined,
+  keys: readonly string[],
+): string | null {
+  return (
+    keys.find((candidate) => descriptorHasInput(descriptor, candidate)) ?? null
+  );
+}
+
+function descriptorOutputBinding(
+  descriptor: TargetToolDescriptor | undefined,
+  keys: readonly string[],
+  nodeId: string,
+  path: string,
+): Binding | null {
+  const key = descriptorInputKey(descriptor, keys);
+  return key ? bindingOutput(nodeId, path) : null;
 }
 
 function buildInputSchema(
@@ -713,33 +756,6 @@ function isExternalPreviewMessage(
     typeof value.error.code === "string" &&
     typeof value.error.message === "string"
   );
-}
-
-/**
- * Build a safe, Studio-owned snapshot runtime for inferred external tools.
- * The fetched HTML has already been sanitized by the inspection service. This
- * adapter only fills visible controls, highlights evidence, and reports a
- * local state change; it never loads third-party scripts or sends a request
- * to the external origin.
- */
-function interactiveExternalPreviewHtml(html: string, token: string): string {
-  const safeToken = token.replace(/[&<>"']/g, (character) => {
-    const entities: Record<string, string> = {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;",
-    };
-    return entities[character] ?? character;
-  });
-  const tokenMeta = `<meta name="webmcp-studio-preview-token" content="${safeToken}">`;
-  const scriptTag =
-    '<script src="/assets/external-preview-runtime.js"></script>';
-  if (/<head\b[^>]*>/i.test(html)) {
-    return html.replace(/(<head\b[^>]*>)/i, `$1${tokenMeta}${scriptTag}`);
-  }
-  return `${tokenMeta}${scriptTag}${html}`;
 }
 
 function materializeSchemaDefaults(
@@ -1625,15 +1641,34 @@ export class HostedStudio {
       previewHtml,
     };
     this.targetFrame.removeAttribute("src");
-    // The sandbox deliberately keeps the snapshot on an opaque origin. The
-    // tokenized bridge below is the only way the Studio can ask its own
-    // preview adapter to apply a declarative inferred action.
+    // Keep the snapshot in an opaque-origin frame. The shell contains only
+    // Studio's trusted bridge; the fetched, sanitized markup arrives through
+    // a tokenized postMessage and cannot load a script or reach the parent.
+    this.targetFrame.removeAttribute("srcdoc");
     this.targetFrame.setAttribute("sandbox", "allow-scripts");
-    this.targetFrame.srcdoc = interactiveExternalPreviewHtml(
-      previewHtml,
-      token,
-    );
+    this.targetFrame.src =
+      "/assets/external-preview.html?token=" + encodeURIComponent(token);
     this.targetFrame.hidden = false;
+  }
+
+  private postExternalPreviewSnapshot(): void {
+    if (this.targetScope !== "external" || !this.externalPreviewToken) return;
+    const frameWindow = this.targetFrame.contentWindow;
+    const html = this.externalPreview.previewHtml?.trim();
+    if (!frameWindow || !html) return;
+    const message: ExternalPreviewCommand = {
+      channel: EXTERNAL_PREVIEW_CHANNEL,
+      version: EXTERNAL_PREVIEW_VERSION,
+      direction: "parent-to-preview",
+      type: "load",
+      token: this.externalPreviewToken,
+      html,
+    };
+    try {
+      frameWindow.postMessage(message, "*");
+    } catch {
+      // The ready handshake will be retried if the frame is replaced.
+    }
   }
 
   private async ensureExternalPreviewSnapshot(): Promise<boolean> {
@@ -1747,6 +1782,7 @@ export class HostedStudio {
       this.externalPreviewReady = true;
       this.externalPreviewReadyResolver?.();
       this.externalPreviewReadyResolver = null;
+      this.postExternalPreviewSnapshot();
       return true;
     }
     const pending = this.pendingExternalPreview.get(message.requestId);
@@ -1783,8 +1819,9 @@ export class HostedStudio {
 
   /**
    * Descriptors that may be assembled on the canvas. External descriptors are
-   * proposals only; the execution and publication paths still use
-   * nativeTargetTools()/targetScope guards below.
+   * inferred proposals at discovery time, but generated workflows can execute
+   * them through the Studio-owned snapshot adapter. Only page publication is
+   * restricted by the external target boundary.
    */
   private workflowToolDescriptors(): TargetToolDescriptor[] {
     return this.targetScope === "external"
@@ -2260,14 +2297,17 @@ export class HostedStudio {
       return false;
     }
     if (this.targetScope !== "controlled") {
+      const studioRuntimeMessage = generated.native
+        ? "The custom tool is registered on Studio's WebMCP context."
+        : "The custom tool is available in Studio preview; native WebMCP is unavailable in this browser.";
+      const message = `${studioRuntimeMessage} Run preview executes it against the interactive sanitized snapshot. Hosted Studio cannot inject into a third-party origin; live external injection needs the optional extension adapter.`;
       this.setPublication(name, {
-        status: "failed",
+        ...generated.publication,
         mode: "preview",
-        message:
-          "This tool is saved and runnable in the Studio snapshot, but hosted Studio cannot inject into a third-party origin.",
+        message,
       });
       this.showComposerMessage(
-        "Live external injection needs the optional extension adapter. Run preview to execute this inferred workflow in Studio.",
+        `${studioRuntimeMessage} Run preview remains enabled. Live third-party injection needs the optional extension adapter.`,
         true,
       );
       return false;
@@ -2387,6 +2427,33 @@ export class HostedStudio {
     }
   }
 
+  /**
+   * Exercise a generated tool through Studio's own WebMCP host when the
+   * browser exposes its imperative test surface. The fallback is the exact
+   * registered handler, which keeps the button useful in preview-only
+   * browsers without pretending that native WebMCP is available.
+   */
+  private async invokeStudioGenerated(
+    name: string,
+    input: JsonValue,
+  ): Promise<JsonValue> {
+    const generated = this.generated.get(name);
+    if (!generated) throw new Error(`Generated tool ${name} is not available.`);
+    const fallbackTool = toNativeWebMcpTool(
+      this.generatedDescriptor(generated),
+      (value: unknown): Promise<JsonValue> =>
+        this.executeGenerated(name, value),
+    );
+    if (generated.native && this.nativeContext?.executeTool)
+      return executeNativeModelTool(
+        this.nativeContext,
+        name,
+        fallbackTool,
+        input,
+      );
+    return this.executeGenerated(name, input);
+  }
+
   private async requestPageGeneratedTest(
     name: string,
     input: JsonValue,
@@ -2433,7 +2500,7 @@ export class HostedStudio {
       this.targetScope === "controlled" && this.targetMode === "preview";
     if (externalPreview && !(await this.ensureExternalPreviewSnapshot())) {
       this.showComposerMessage(
-        "The inferred tool is saved, but this site did not provide a preview snapshot to run.",
+        "Run preview is unavailable because this site did not provide an interactive snapshot. Re-run analysis and try again.",
         true,
       );
       return;
@@ -2464,7 +2531,9 @@ export class HostedStudio {
         // Preview targets execute the same structured workflow as a published
         // page tool. External targets use the Studio-owned snapshot adapter;
         // no third-party origin is contacted.
-        result = await this.executeGenerated(name, input);
+        result = externalPreview
+          ? await this.invokeStudioGenerated(name, input)
+          : await this.executeGenerated(name, input);
       } else {
         result = await this.requestPageGeneratedTest(name, input);
       }
@@ -2474,17 +2543,17 @@ export class HostedStudio {
       if (result === null)
         result = errorResult(name, targetErrorMessage(error));
     }
+    const previewRun = controlledPreview || externalPreview;
     const latest = this.generated.get(name);
     if (latest) {
       const succeeded = isRecord(result) && result.success === true;
-      const previewRun = controlledPreview || externalPreview;
       this.setPublication(name, {
         ...latest.publication,
         status: succeeded ? (previewRun ? "generated" : "injected") : "failed",
         ...(succeeded && previewRun
           ? {
               message: externalPreview
-                ? "Inferred preview ran against the Studio-owned snapshot. Use the optional extension to instrument the live external page."
+                ? `${generated.native ? "Run preview passed against the Studio-owned snapshot; the custom tool remains registered on Studio's WebMCP context." : "Run preview passed against the Studio-owned snapshot; native Studio WebMCP is unavailable in this browser."} Live third-party injection needs the optional extension adapter.`
                 : "Preview ran against the controlled target. Inject the tool when native page WebMCP is available.",
             }
           : {}),
@@ -2497,9 +2566,16 @@ export class HostedStudio {
             }),
       });
     }
-    if (isRecord(result) && result.success === true)
-      this.showComposerMessage("Test passed — the target page updated.", false);
-    else
+    if (isRecord(result) && result.success === true) {
+      this.showComposerMessage(
+        previewRun
+          ? externalPreview
+            ? "Test passed — Run preview updated the interactive external snapshot."
+            : "Test passed — Run preview updated the controlled target."
+          : "Test passed — the target page updated.",
+        false,
+      );
+    } else
       this.showComposerMessage(
         targetErrorMessage(isRecord(result) ? result.error : result),
         true,
@@ -2553,11 +2629,16 @@ export class HostedStudio {
                   name: external.hostname,
                   url: resolution.url,
                 },
-                mode: "potential",
-                status: "potential",
+                mode: "preview",
+                status: "preview",
                 provenance: "inferred",
+                execution: "studio_snapshot",
+                canCompose: true,
+                canGenerate: true,
+                canExecute: true,
+                livePageInjection: false,
                 tools: potential,
-                note: "Inferred tools are based on fetched page source and interface evidence. They can be composed and executed against a Studio-owned snapshot; live third-party injection needs the optional extension adapter.",
+                note: "Inferred tools are based on fetched page source and interface evidence. They are ready to compose, generate, and execute against the Studio-owned snapshot. Live third-party page injection needs the optional extension adapter.",
               });
             }
             await this.selectTarget(resolution.id);
@@ -2577,11 +2658,16 @@ export class HostedStudio {
                 name: new URL(externalUrl).hostname,
                 url: externalUrl,
               },
-              mode: "potential",
-              status: "potential",
+              mode: "preview",
+              status: "preview",
               provenance: "inferred",
+              execution: "studio_snapshot",
+              canCompose: true,
+              canGenerate: true,
+              canExecute: true,
+              livePageInjection: false,
               tools: potential,
-              note: "Inferred tools are based on fetched page source and interface evidence. They can be composed and executed against a Studio-owned snapshot; live third-party injection needs the optional extension adapter.",
+              note: "Inferred tools are based on fetched page source and interface evidence. They are ready to compose, generate, and execute against the Studio-owned snapshot. Live third-party page injection needs the optional extension adapter.",
             });
           }
           return asJsonValue({
@@ -2611,7 +2697,7 @@ export class HostedStudio {
             this.potentialTools.find((candidate) => candidate.name === name);
           const status =
             this.targetScope === "external"
-              ? "potential"
+              ? "preview"
               : this.targetMode === "native"
                 ? "live"
                 : "preview";
@@ -2632,7 +2718,7 @@ export class HostedStudio {
       {
         name: "compose_workflow",
         description:
-          "Compose an ordered structured workflow from unique discovered native or inferred WebMCP tool names.",
+          "Compose an ordered structured workflow from unique discovered native or inferred WebMCP tool names. Inferred workflows remain executable in Studio preview.",
         inputSchema: {
           type: "object",
           properties: {
@@ -2654,7 +2740,7 @@ export class HostedStudio {
       {
         name: "generate_tool",
         description:
-          "Validate and register a composed target workflow for this session.",
+          "Validate, save, and register a composed workflow on Studio's WebMCP context when available. Native and inferred primitives are accepted; inferred workflows execute in the interactive Studio preview.",
         inputSchema: {
           type: "object",
           properties: {
@@ -3418,7 +3504,7 @@ export class HostedStudio {
     const valid = this.readPrimitiveNames(names);
     const validationMessage =
       unknown.length > 0
-        ? `Unknown or inferred primitive(s): ${unknown.join(", ")}.`
+        ? `Unknown primitive(s): ${unknown.join(", ")}.`
         : duplicates.length > 0
           ? `A workflow step can appear only once: ${duplicates.join(", ")}.`
           : null;
@@ -3476,7 +3562,13 @@ export class HostedStudio {
       );
       return;
     }
-    this.showComposerMessage(`Saved ${name} for this session.`, false);
+    const registeredOnStudio = isRecord(result) && result.native === true;
+    this.showComposerMessage(
+      registeredOnStudio
+        ? `Saved ${name} for this session and registered it on Studio WebMCP. Run preview is ready.`
+        : `Saved ${name} for this session. Run preview is ready; Studio WebMCP registration is unavailable in this browser.`,
+      false,
+    );
     this.renderGenerated();
   }
 
@@ -3561,6 +3653,9 @@ export class HostedStudio {
       },
       new AbortController(),
     );
+    const studioRuntimeMessage = native
+      ? "The custom tool is registered on Studio's WebMCP context."
+      : "Studio's native WebMCP context is unavailable; Run preview remains executable.";
     const generated: GeneratedTool = {
       name,
       description,
@@ -3573,8 +3668,8 @@ export class HostedStudio {
         mode: this.targetScope === "external" ? "preview" : "unavailable",
         message:
           this.targetScope === "external"
-            ? "Saved from inferred page evidence. Run preview to execute it against the Studio-owned snapshot; live external injection needs the optional extension."
-            : "Generated for this session. Publish it to the target page before testing the page-level tool.",
+            ? `Generated from inferred page evidence. ${studioRuntimeMessage} Run preview executes it against the interactive sanitized snapshot. Live injection into a third-party page needs the optional extension adapter.`
+            : `${studioRuntimeMessage} Inject it into the selected same-origin target to expose the page-level tool.`,
       },
     };
     this.generated.set(name, generated);
@@ -4202,7 +4297,9 @@ export class HostedStudio {
       const mode = this.documentValue.createElement("span");
       mode.className = tool.publication.mode === "native" ? "live" : "";
       mode.textContent = external
-        ? "Studio snapshot preview"
+        ? tool.native
+          ? "Studio WebMCP registered · Run preview"
+          : "Studio preview · WebMCP unavailable"
         : tool.publication.mode === "native"
           ? "page WebMCP registered"
           : tool.publication.mode === "preview"
@@ -4234,7 +4331,7 @@ export class HostedStudio {
           : "Inject into page";
       if (external)
         inject.title =
-          "Hosted Studio cannot inject into a third-party origin. Use the optional extension for live instrumentation.";
+          "Third-party page injection is unavailable here. Run preview uses the interactive sanitized snapshot; use the optional extension for live instrumentation.";
       const test = this.documentValue.createElement("button");
       test.className = "button button-primary test-tool-button";
       test.type = "button";
@@ -4299,7 +4396,7 @@ export class HostedStudio {
           : "Inject into page";
       if (this.targetScope === "external")
         injectButton.title =
-          "Hosted Studio cannot inject into a third-party origin. Use the optional extension for live instrumentation.";
+          "Third-party page injection is unavailable here. Run preview uses the interactive sanitized snapshot; use the optional extension for live instrumentation.";
     }
     if (testButton) {
       testButton.disabled =
@@ -4318,7 +4415,7 @@ export class HostedStudio {
     if (help) {
       help.textContent = latestTool
         ? this.targetScope === "external"
-          ? "Saved from inferred evidence. Run preview to execute the workflow against the safe snapshot; live external injection needs the optional extension."
+          ? `${latestTool.native ? "Registered on Studio's WebMCP context." : "Native Studio WebMCP is unavailable in this browser; preview remains available."} Run preview executes the workflow against the interactive sanitized snapshot. Live third-party injection needs the optional extension adapter.`
           : latestTool.publication.mode === "native"
             ? "Registered on the target page. Test the same WebMCP handler an agent can invoke."
             : "Native WebMCP is unavailable in this browser. Run the controlled preview; it uses the same workflow and visible page effects."
@@ -4334,11 +4431,17 @@ export class HostedStudio {
     );
     if (modeTitle)
       modeTitle.textContent =
-        this.targetScope === "external" ? "Studio preview" : "Page WebMCP";
+        this.targetScope === "external"
+          ? latestTool?.native
+            ? "Studio WebMCP"
+            : "Studio preview"
+          : "Page WebMCP";
     if (modeCopy)
       modeCopy.textContent =
         this.targetScope === "external"
-          ? "Run the saved tool on a safe local snapshot of the inspected page."
+          ? latestTool?.native
+            ? "The generated tool is available to the Studio WebMCP agent. Run preview executes it on an interactive sanitized snapshot; third-party page injection needs the optional extension."
+            : "Run preview executes the generated tool on an interactive sanitized snapshot. Native Studio WebMCP is unavailable in this browser; third-party page injection needs the optional extension."
           : "Inject the saved tool into the selected target.";
   }
 
@@ -4491,8 +4594,33 @@ function hostedWorkflow(
       const isNativeTargetPrimitive = descriptor?.source === "webmcp";
       const outputFromPrevious = (path: string): Binding | null =>
         previousId ? bindingOutput(previousId, path) : null;
+      const bindDescriptorInput = (keys: readonly string[]): void => {
+        const key = descriptorInputKey(descriptor, keys);
+        if (key) bindings[key] = bindingInput(key);
+      };
+      const bindDescriptorOutput = (
+        keys: readonly string[],
+        path: string,
+      ): void => {
+        const binding = previousId
+          ? descriptorOutputBinding(descriptor, keys, previousId, path)
+          : null;
+        const key = descriptorInputKey(descriptor, keys);
+        if (binding && key) bindings[key] = binding;
+      };
       if (isNativeTargetPrimitive && primitiveName === "search_products") {
         bindings.query = bindingInput("requirements");
+      } else if (primitiveName === "search_products") {
+        // Inferred schemas usually retain the page's field name (query/q),
+        // while the controlled commerce target exposes the friendlier
+        // requirements input above.
+        bindDescriptorInput([
+          "query",
+          "q",
+          "search",
+          "requirements",
+          "keyword",
+        ]);
       } else if (
         isNativeTargetPrimitive &&
         primitiveName === "filter_products"
@@ -4502,6 +4630,9 @@ function hostedWorkflow(
         );
         if (!names.includes("search_products"))
           bindings.category = bindingInput("category");
+      } else if (primitiveName === "filter_products") {
+        bindDescriptorInput(["maxPrice", "max_price", "price", "max"]);
+        bindDescriptorInput(["category", "type", "department"]);
       } else if (isNativeTargetPrimitive && primitiveName === "get_product") {
         const productId =
           previousName === "get_product"
@@ -4512,6 +4643,20 @@ function hostedWorkflow(
               : null;
         if (productId) bindings.productId = productId;
         else bindings.productId = bindingInput("productId");
+      } else if (primitiveName === "get_product") {
+        const productPath =
+          previousName === "get_product"
+            ? "product.id"
+            : previousName === "search_products" ||
+                previousName === "filter_products"
+              ? "products[0].id"
+              : null;
+        if (productPath)
+          bindDescriptorOutput(
+            ["productId", "product_id", "id", "sku"],
+            productPath,
+          );
+        else bindDescriptorInput(["productId", "product_id", "id", "sku"]);
       } else if (isNativeTargetPrimitive && primitiveName === "add_to_cart") {
         const productId =
           previousName === "get_product"
@@ -4523,12 +4668,38 @@ function hostedWorkflow(
         if (productId) bindings.productId = productId;
         else bindings.productId = bindingInput("productId");
         bindings.quantity = bindingInput("quantity");
+      } else if (primitiveName === "add_to_cart") {
+        const productPath =
+          previousName === "get_product"
+            ? "product.id"
+            : previousName === "search_products" ||
+                previousName === "filter_products"
+              ? "products[0].id"
+              : null;
+        if (productPath)
+          bindDescriptorOutput(
+            ["productId", "product_id", "itemId", "item_id", "id", "sku"],
+            productPath,
+          );
+        else
+          bindDescriptorInput([
+            "productId",
+            "product_id",
+            "itemId",
+            "item_id",
+            "id",
+            "sku",
+          ]);
+        bindDescriptorInput(["quantity", "count"]);
       } else if (
         isNativeTargetPrimitive &&
         primitiveName === "search_options"
       ) {
         bindings.origin = bindingInput("origin");
         bindings.destination = bindingInput("destination");
+      } else if (primitiveName === "search_options") {
+        bindDescriptorInput(["origin", "from", "departure"]);
+        bindDescriptorInput(["destination", "to", "arrival"]);
       } else if (
         isNativeTargetPrimitive &&
         primitiveName === "filter_options"
@@ -4542,6 +4713,14 @@ function hostedWorkflow(
         bindings.maxPrice = bindingInput(
           names.includes("search_options") ? "max_price" : "maxPrice",
         );
+      } else if (primitiveName === "filter_options") {
+        if (
+          previousName === "search_options" ||
+          previousName === "filter_options"
+        )
+          bindDescriptorOutput(["optionIds", "option_ids", "ids"], "optionIds");
+        else bindDescriptorInput(["optionIds", "option_ids", "ids"]);
+        bindDescriptorInput(["maxPrice", "max_price", "price", "max"]);
       } else if (isNativeTargetPrimitive && primitiveName === "get_details") {
         const optionId =
           previousName === "get_details" || previousName === "select_option"
@@ -4552,6 +4731,27 @@ function hostedWorkflow(
               : null;
         if (optionId) bindings.optionId = optionId;
         else bindings.optionId = bindingInput("optionId");
+      } else if (primitiveName === "get_details") {
+        const optionPath =
+          previousName === "get_details" || previousName === "select_option"
+            ? "optionId"
+            : previousName === "search_options" ||
+                previousName === "filter_options"
+              ? "optionIds[0]"
+              : null;
+        if (optionPath)
+          bindDescriptorOutput(
+            ["optionId", "option_id", "id", "flightId", "flight_id"],
+            optionPath,
+          );
+        else
+          bindDescriptorInput([
+            "optionId",
+            "option_id",
+            "id",
+            "flightId",
+            "flight_id",
+          ]);
       } else if (isNativeTargetPrimitive && primitiveName === "select_option") {
         const optionId =
           previousName === "get_details" || previousName === "select_option"
@@ -4562,6 +4762,27 @@ function hostedWorkflow(
               : null;
         if (optionId) bindings.optionId = optionId;
         else bindings.optionId = bindingInput("optionId");
+      } else if (primitiveName === "select_option") {
+        const optionPath =
+          previousName === "get_details" || previousName === "select_option"
+            ? "optionId"
+            : previousName === "search_options" ||
+                previousName === "filter_options"
+              ? "optionIds[0]"
+              : null;
+        if (optionPath)
+          bindDescriptorOutput(
+            ["optionId", "option_id", "id", "flightId", "flight_id"],
+            optionPath,
+          );
+        else
+          bindDescriptorInput([
+            "optionId",
+            "option_id",
+            "id",
+            "flightId",
+            "flight_id",
+          ]);
       }
       for (const key of Object.keys(
         schemaProperties(descriptor?.inputSchema ?? {}),

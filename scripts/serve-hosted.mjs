@@ -256,7 +256,12 @@ async function serveRequest(request, response, distRoot, realDistRoot) {
         "application/octet-stream",
       ...(pathname === "/assets/external-preview-runtime.js"
         ? { "Cross-Origin-Resource-Policy": "cross-origin" }
-        : {}),
+        : pathname === "/assets/external-preview.html"
+          ? {
+              "Content-Security-Policy":
+                "default-src 'none'; base-uri 'none'; frame-ancestors 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'",
+            }
+          : {}),
     };
     sendResponse(request, response, 200, headers, body);
   } catch (error) {
