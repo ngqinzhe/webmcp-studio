@@ -1113,6 +1113,12 @@ textarea:focus,
   padding: 10px 21px 21px;
 }
 
+.composer-layout > *,
+.tool-form > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .flow-column,
 .tool-form {
   min-width: 0;
@@ -1349,6 +1355,8 @@ textarea:focus,
 
 .tool-form input,
 .tool-form textarea {
+  min-width: 0;
+  max-width: 100%;
   margin-bottom: 0;
 }
 
@@ -1372,6 +1380,9 @@ textarea:focus,
 }
 
 .schema-preview {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   margin-top: 4px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -2065,7 +2076,7 @@ body.is-pointer-dragging {
 }
 
 .builder-grid {
-  align-items: start;
+  align-items: stretch;
 }
 
 .panel-header {

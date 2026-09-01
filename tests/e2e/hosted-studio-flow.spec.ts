@@ -58,6 +58,15 @@ interface ToolListLayoutSnapshot {
   schemaBottoms: number[];
 }
 
+interface BuilderLayoutSnapshot {
+  discoveryBottom: number;
+  builderColumnBottom: number;
+  targetTop: number;
+  composerRight: number;
+  formRight: number;
+  fieldRights: number[];
+}
+
 const externalSnapshotHtml = `
 <!doctype html>
 <html>
@@ -213,6 +222,43 @@ function expectToolListScrollable(layout: ToolListLayoutSnapshot): void {
     Math.abs(layout.listBottom - layout.listTop - layout.clientHeight),
   ).toBeLessThanOrEqual(1);
   expect(layout.listBottom).toBeLessThanOrEqual(layout.panelBottom + 1);
+}
+
+async function measureBuilderLayout(
+  page: Page,
+): Promise<BuilderLayoutSnapshot> {
+  return page.evaluate(() => {
+    const rect = (selector: string): DOMRect => {
+      const node = document.querySelector<HTMLElement>(selector);
+      if (!node) throw new Error(`Layout element ${selector} was not found.`);
+      return node.getBoundingClientRect();
+    };
+    const composer = rect(".composer-panel");
+    const form = rect("#tool-form");
+    const fields = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        "#tool-form input, #tool-form textarea, #tool-form .schema-preview, #tool-form pre",
+      ),
+    );
+    return {
+      discoveryBottom: rect(".discovery-panel").bottom,
+      builderColumnBottom: rect(".builder-column").bottom,
+      targetTop: rect(".target-panel").top,
+      composerRight: composer.right,
+      formRight: form.right,
+      fieldRights: fields.map((field) => field.getBoundingClientRect().right),
+    };
+  });
+}
+
+function expectBuilderLayoutContained(layout: BuilderLayoutSnapshot): void {
+  expect(
+    Math.abs(layout.discoveryBottom - layout.builderColumnBottom),
+  ).toBeLessThanOrEqual(1);
+  expect(layout.discoveryBottom).toBeLessThanOrEqual(layout.targetTop);
+  expect(layout.formRight).toBeLessThanOrEqual(layout.composerRight + 1);
+  for (const right of layout.fieldRights)
+    expect(right).toBeLessThanOrEqual(layout.composerRight + 1);
 }
 
 declare global {
@@ -1145,6 +1191,22 @@ test.describe("hosted WebMCP Studio builder", () => {
         5,
       );
       expectToolListScrollable(await measureToolList(page, "#discovery-list"));
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("keeps the discovery and workflow columns contained at desktop width", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      viewport: { width: 1280, height: 720 },
+      storageState: { cookies: [], origins: [] },
+    });
+    const page = await context.newPage();
+    try {
+      await page.goto(`${hostedBaseUrl}/`, { waitUntil: "domcontentloaded" });
+      expectBuilderLayoutContained(await measureBuilderLayout(page));
     } finally {
       await context.close();
     }
