@@ -21,6 +21,7 @@ export interface ExternalInspectionResult {
     status: "allowed" | "blocked" | "unknown";
     reason: string;
   };
+  previewHtml: string;
   note: string;
   error?: string;
 }
