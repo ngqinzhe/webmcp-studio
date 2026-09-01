@@ -179,12 +179,14 @@ interface PendingInvocation {
   timer: number;
 }
 
-type ExternalPreviewStatus = "idle" | "checking" | "visible" | "blocked";
+type ExternalPreviewStatus =
+  "idle" | "checking" | "visible" | "snapshot" | "blocked";
 
 interface ExternalPreviewState {
   status: ExternalPreviewStatus;
   url: string;
   message: string;
+  previewHtml?: string;
 }
 
 interface ExternalInspectionResponse {
@@ -197,6 +199,7 @@ interface ExternalInspectionResponse {
     reason: string;
   };
   note: string;
+  previewHtml?: string;
   error?: string;
 }
 
@@ -243,6 +246,7 @@ const DEFAULT_INPUT = {
 };
 
 const GENERATED_STORAGE_PREFIX = "webmcp-studio.generated-tools.v2";
+const MAX_EXTERNAL_PREVIEW_HTML = 220_000;
 const STUDIO_TOOL_NAMES = [
   "discover_site_tools",
   "inspect_tool",
@@ -597,6 +601,7 @@ function externalInspectionFromJson(
   const note = stringValue(value.note).trim();
   const reason = stringValue(frameValue.reason).trim();
   if (!url || !note || !reason) return null;
+  const previewHtml = stringValue(value.previewHtml).trim();
   return {
     status,
     url,
@@ -604,6 +609,10 @@ function externalInspectionFromJson(
     tools,
     frame: { status: frameStatus, reason },
     note,
+    ...(previewHtml.length > 0 &&
+    previewHtml.length <= MAX_EXTERNAL_PREVIEW_HTML
+      ? { previewHtml }
+      : {}),
     ...(stringValue(value.error).trim()
       ? { error: stringValue(value.error).trim() }
       : {}),
@@ -1235,6 +1244,8 @@ export class HostedStudio {
     this.generated.clear();
     this.project = createProject(new URL(rawUrl).hostname);
     this.targetFrame.title = "External site preview";
+    this.targetFrame.removeAttribute("srcdoc");
+    this.targetFrame.removeAttribute("sandbox");
     this.targetFrame.src = "about:blank";
     this.targetFrame.hidden = true;
     this.hideTargetLoading(true);
@@ -1271,22 +1282,37 @@ export class HostedStudio {
         url: finalUrl,
       };
       const blocked = inspection.frame.status === "blocked";
+      const previewHtml = inspection.previewHtml?.trim() || "";
+      const hasSnapshot = blocked && previewHtml.length > 0;
       this.externalPreview = {
-        status: blocked ? "blocked" : "visible",
+        status: hasSnapshot ? "snapshot" : blocked ? "blocked" : "visible",
         url: finalUrl,
         message: blocked
           ? inspection.frame.reason
           : inspection.frame.reason ||
             "Preview loaded when the external site permits framing.",
+        ...(hasSnapshot ? { previewHtml } : {}),
       };
       this.clearExternalPreviewTimer();
-      this.targetFrame.src = finalUrl;
-      this.targetFrame.hidden = blocked;
+      if (hasSnapshot) {
+        this.targetFrame.removeAttribute("src");
+        this.targetFrame.setAttribute("sandbox", "");
+        this.targetFrame.srcdoc = previewHtml;
+        this.targetFrame.hidden = false;
+      } else {
+        this.targetFrame.removeAttribute("srcdoc");
+        this.targetFrame.removeAttribute("sandbox");
+        this.targetFrame.src = finalUrl;
+        this.targetFrame.hidden = blocked;
+      }
       this.hideTargetLoading(false);
       this.renderAll();
       const count = this.potentialTools.length;
+      const snapshotNote = hasSnapshot
+        ? " Showing a read-only snapshot because the site blocks embedded previews."
+        : "";
       this.showSiteMessage(
-        `${this.targetIdentity.name}: ${count} inferred potential tool${count === 1 ? "" : "s"}. ${inspection.note}${blocked ? ` ${inspection.frame.reason}` : ""}`,
+        `${this.targetIdentity.name}: ${count} inferred potential tool${count === 1 ? "" : "s"}. ${inspection.note}${blocked ? ` ${inspection.frame.reason}` : ""}${snapshotNote}`,
         false,
       );
     } catch (error) {
@@ -1298,6 +1324,8 @@ export class HostedStudio {
         message:
           "The page could not be inspected, so Studio did not open the external URL.",
       };
+      this.targetFrame.removeAttribute("srcdoc");
+      this.targetFrame.removeAttribute("sandbox");
       this.targetFrame.src = "about:blank";
       this.targetFrame.hidden = true;
       this.hideTargetLoading(false);
@@ -1938,7 +1966,8 @@ export class HostedStudio {
       );
       return;
     }
-    if (generated.publication.status !== "injected") {
+    const controlledPreview = this.targetMode === "preview";
+    if (!controlledPreview && generated.publication.status !== "injected") {
       const injected = await this.injectGeneratedTool(name);
       if (!injected) {
         this.showComposerMessage(
@@ -1958,9 +1987,17 @@ export class HostedStudio {
     const input = this.defaultInputForTarget();
     let result: JsonValue | null = null;
     try {
-      result = await this.requestPageGeneratedTest(name, input);
+      if (controlledPreview) {
+        // A controlled target without native WebMCP still exposes the same
+        // primitive bridge. Run the structured workflow directly so the
+        // preview button is useful even when page publication is unavailable.
+        result = await this.executeGenerated(name, input);
+      } else {
+        result = await this.requestPageGeneratedTest(name, input);
+      }
     } catch (error) {
-      result = await this.invokePageRegistration(name, input);
+      if (!controlledPreview)
+        result = await this.invokePageRegistration(name, input);
       if (result === null)
         result = errorResult(name, targetErrorMessage(error));
     }
@@ -1974,6 +2011,14 @@ export class HostedStudio {
             ? "generated"
             : "injected"
           : "failed",
+        ...(succeeded &&
+        controlledPreview &&
+        latest.publication.mode === "unavailable"
+          ? {
+              message:
+                "Preview ran against the controlled target. Inject the tool when native page WebMCP is available.",
+            }
+          : {}),
         ...(succeeded
           ? {}
           : {
@@ -2403,6 +2448,8 @@ export class HostedStudio {
     this.project = createProject(
       id === "commerce" ? "northstar.test" : "skyline.test",
     );
+    this.targetFrame.removeAttribute("srcdoc");
+    this.targetFrame.removeAttribute("sandbox");
     this.targetFrame.src = config.path;
     this.targetFrame.hidden = false;
     this.hideTargetLoading(true);
@@ -3166,11 +3213,15 @@ export class HostedStudio {
       targetLabel.textContent =
         this.targetScope === "controlled"
           ? "controlled target"
-          : "external preview";
+          : this.externalPreview.status === "snapshot"
+            ? "read-only snapshot"
+            : "external preview";
     this.targetFrame.title =
       this.targetScope === "controlled"
         ? "Live controlled target website"
-        : "External site preview";
+        : this.externalPreview.status === "snapshot"
+          ? "Read-only external site snapshot"
+          : "External site preview";
   }
 
   private renderTargetFallback(): void {

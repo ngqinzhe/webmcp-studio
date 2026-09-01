@@ -513,15 +513,13 @@ test.describe("hosted WebMCP Studio builder", () => {
       await page.locator("#tool-name").fill("find_best_route");
       await page.locator("#generate-button").click();
       const generated = await generatedCard(page, "find_best_route");
-      const inject = generated.getByRole("button", {
-        name: /inject into page/i,
-      });
-      if (await inject.count()) await inject.click();
       await clickPageAction(page, generated, /run preview/i);
 
       await expect(page.locator("#composer-message")).toContainText(
         /test passed/i,
       );
+      await expect(generated).toContainText("generated · ready");
+      await expect(generated).not.toContainText("page preview handler");
       const target = await targetFrameFor(page, "/targets/travel.html");
       await expect(target.locator("#details")).toBeVisible({ timeout: 20_000 });
       await expect(target.locator("#details-route")).toContainText(

@@ -1,4 +1,5 @@
 const MAX_HTML_BYTES = 1_250_000;
+const MAX_PREVIEW_HTML_BYTES = 200_000;
 const MAX_TOOLS = 24;
 const MAX_REDIRECTS = 3;
 const FETCH_TIMEOUT_MS = 8_000;
@@ -8,6 +9,149 @@ const REQUEST_BODY_TIMEOUT_MS = 5_000;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const HTML_CONTENT_TYPES = ["text/html", "application/xhtml+xml"];
 const TOOL_NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
+const PREVIEW_ALLOWED_TAGS = new Set([
+  "a",
+  "article",
+  "aside",
+  "b",
+  "blockquote",
+  "body",
+  "br",
+  "button",
+  "caption",
+  "code",
+  "col",
+  "colgroup",
+  "dd",
+  "details",
+  "div",
+  "dl",
+  "dt",
+  "em",
+  "fieldset",
+  "figcaption",
+  "figure",
+  "footer",
+  "form",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "head",
+  "header",
+  "hgroup",
+  "html",
+  "hr",
+  "input",
+  "label",
+  "legend",
+  "li",
+  "main",
+  "ol",
+  "option",
+  "optgroup",
+  "p",
+  "pre",
+  "q",
+  "s",
+  "section",
+  "select",
+  "small",
+  "span",
+  "strong",
+  "summary",
+  "table",
+  "textarea",
+  "tbody",
+  "td",
+  "tfoot",
+  "th",
+  "thead",
+  "title",
+  "tr",
+  "u",
+  "ul",
+  "var",
+]);
+const PREVIEW_VOID_TAGS = new Set(["br", "col", "hr", "input"]);
+const PREVIEW_BLOCKED_CONTENT_TAGS = new Set([
+  "applet",
+  "frame",
+  "frameset",
+  "iframe",
+  "math",
+  "object",
+  "portal",
+  "script",
+  "style",
+  "svg",
+  "template",
+]);
+const PREVIEW_BLOCKED_TAGS = new Set([
+  "audio",
+  "base",
+  "canvas",
+  "embed",
+  "link",
+  "meta",
+  "param",
+  "picture",
+  "source",
+  "track",
+  "video",
+]);
+const PREVIEW_URL_ATTRIBUTES = new Set([
+  "action",
+  "background",
+  "cite",
+  "data",
+  "formaction",
+  "href",
+  "longdesc",
+  "manifest",
+  "poster",
+  "profile",
+  "src",
+  "srcdoc",
+  "srcset",
+  "usemap",
+  "xlink:href",
+]);
+const PREVIEW_SAFE_ATTRIBUTES = new Set([
+  "alt",
+  "checked",
+  "class",
+  "colspan",
+  "dir",
+  "disabled",
+  "for",
+  "hidden",
+  "id",
+  "lang",
+  "max",
+  "maxlength",
+  "min",
+  "multiple",
+  "name",
+  "open",
+  "placeholder",
+  "readonly",
+  "required",
+  "role",
+  "rowspan",
+  "rows",
+  "selected",
+  "size",
+  "span",
+  "step",
+  "tabindex",
+  "title",
+  "type",
+  "value",
+  "wrap",
+]);
 const BLOCKED_HOSTNAMES = new Set([
   "localhost",
   "localhost.localdomain",
@@ -196,9 +340,17 @@ function decodeEntities(value) {
     .replace(/&gt;/gi, ">")
     .replace(/&quot;/gi, '"')
     .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&#x([\da-f]+);/gi, (_, code) => {
+      const parsed = Number.parseInt(code, 16);
+      return parsed >= 0 && parsed <= 0x10ffff
+        ? String.fromCodePoint(parsed)
+        : "";
+    })
     .replace(/&#(\d+);/g, (_, code) => {
       const parsed = Number(code);
-      return Number.isFinite(parsed) ? String.fromCodePoint(parsed) : "";
+      return parsed >= 0 && parsed <= 0x10ffff
+        ? String.fromCodePoint(parsed)
+        : "";
     });
 }
 
@@ -206,6 +358,152 @@ function stripTags(value) {
   return decodeEntities(value.replace(/<[^>]*>/g, " "))
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function findPreviewTagEnd(source, start) {
+  let quote = "";
+  for (let index = start; index < source.length; index += 1) {
+    const character = source[index];
+    if (quote) {
+      if (character === quote) quote = "";
+    } else if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === ">") {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function escapePreviewAttribute(value) {
+  return decodeEntities(value)
+    .replace(/\u0000/g, "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function isSafePreviewAttribute(name) {
+  if (name.startsWith("on") || PREVIEW_URL_ATTRIBUTES.has(name)) return false;
+  if (PREVIEW_SAFE_ATTRIBUTES.has(name)) return true;
+  return /^aria-[a-z][a-z0-9_-]*$/.test(name);
+}
+
+function sanitizePreviewAttributes(source) {
+  const attributes = [];
+  const attributePattern =
+    /([^\s=\/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+  let match;
+  while ((match = attributePattern.exec(source)) !== null) {
+    const name = match[1]?.toLowerCase() ?? "";
+    if (!name || !isSafePreviewAttribute(name)) continue;
+    const value = match[2] ?? match[3] ?? match[4];
+    attributes.push(
+      value === undefined
+        ? ` ${name}`
+        : ` ${name}="${escapePreviewAttribute(value)}"`,
+    );
+  }
+  return attributes.join("");
+}
+
+function sanitizePreviewHtml(html) {
+  const source = textValue(html);
+  if (!source) return "";
+
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  const chunks = [];
+  let totalBytes = 0;
+  let truncated = false;
+
+  const append = (value, allowPartial) => {
+    if (truncated || !value) return !truncated;
+    const encoded = encoder.encode(value);
+    const remaining = MAX_PREVIEW_HTML_BYTES - totalBytes;
+    if (encoded.byteLength <= remaining) {
+      chunks.push(value);
+      totalBytes += encoded.byteLength;
+      return true;
+    }
+    if (allowPartial && remaining > 0) {
+      const partial = decoder.decode(encoded.slice(0, remaining));
+      if (partial) {
+        chunks.push(partial);
+        totalBytes += encoder.encode(partial).byteLength;
+      }
+    }
+    truncated = true;
+    return false;
+  };
+
+  let index = 0;
+  while (index < source.length && !truncated) {
+    const tagStart = source.indexOf("<", index);
+    if (tagStart === -1) {
+      append(source.slice(index), true);
+      break;
+    }
+    if (tagStart > index && !append(source.slice(index, tagStart), true)) break;
+
+    if (source.startsWith("<!--", tagStart)) {
+      const commentEnd = source.indexOf("-->", tagStart + 4);
+      index = commentEnd === -1 ? source.length : commentEnd + 3;
+      continue;
+    }
+
+    const tagEnd = findPreviewTagEnd(source, tagStart + 1);
+    if (tagEnd === -1) break;
+    const rawTag = source.slice(tagStart, tagEnd + 1);
+    const tagMatch = rawTag.match(/^<\s*(\/?)\s*([a-z][\w:-]*)/i);
+    if (!tagMatch) {
+      index = tagEnd + 1;
+      continue;
+    }
+
+    const closing = tagMatch[1] === "/";
+    const tagName = tagMatch[2].toLowerCase();
+    if (PREVIEW_BLOCKED_CONTENT_TAGS.has(tagName) && !closing) {
+      const closingPattern = new RegExp(`</\\s*${tagName}\\s*>`, "ig");
+      closingPattern.lastIndex = tagEnd + 1;
+      const closingMatch = closingPattern.exec(source);
+      index = closingMatch
+        ? closingMatch.index + closingMatch[0].length
+        : source.length;
+      continue;
+    }
+    if (
+      PREVIEW_BLOCKED_CONTENT_TAGS.has(tagName) ||
+      PREVIEW_BLOCKED_TAGS.has(tagName)
+    ) {
+      index = tagEnd + 1;
+      continue;
+    }
+    if (!PREVIEW_ALLOWED_TAGS.has(tagName)) {
+      index = tagEnd + 1;
+      continue;
+    }
+
+    if (closing) {
+      if (PREVIEW_VOID_TAGS.has(tagName)) {
+        index = tagEnd + 1;
+        continue;
+      }
+      if (!append(`</${tagName}>`, false)) break;
+    } else {
+      const attributeSource = rawTag
+        .slice(tagMatch[0].length, -1)
+        .replace(/\/\s*$/, "");
+      const normalizedTag = `<${tagName}${sanitizePreviewAttributes(
+        attributeSource,
+      )}>`;
+      if (!append(normalizedTag, false)) break;
+    }
+    index = tagEnd + 1;
+  }
+
+  return chunks.join("");
 }
 
 function attribute(tag, name) {
@@ -387,7 +685,8 @@ function inferredToolsFromHtml(html, used) {
         );
         if (hasAttribute(tag, "required")) required.push(field);
       }
-      if (Object.keys(properties).length > 0)
+      const namedFields = Object.keys(properties);
+      if (namedFields.length > 0) {
         add({
           name: "submit_form",
           description:
@@ -405,10 +704,41 @@ function inferredToolsFromHtml(html, used) {
             {
               type: "dom",
               selector: selectorFor(formTag, formIndex, "form"),
-              note: `Observed ${Object.keys(properties).length} named form field${Object.keys(properties).length === 1 ? "" : "s"}.`,
+              note: `Observed ${namedFields.length} named form field${namedFields.length === 1 ? "" : "s"}.`,
             },
           ],
         });
+      } else {
+        add({
+          name: "submit_form",
+          description:
+            "Potentially submit the observed page form; field names were not available in the returned markup.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              fields: {
+                type: "object",
+                description:
+                  "Optional values keyed by an observed control label or position.",
+                additionalProperties: {
+                  type: "string",
+                },
+              },
+            },
+            additionalProperties: false,
+          },
+          annotations: { destructiveHint: true },
+          source: "dom",
+          confidence: 0.48,
+          evidence: [
+            {
+              type: "dom",
+              selector: selectorFor(formTag, formIndex, "form"),
+              note: `Observed ${controls.length} form control${controls.length === 1 ? "" : "s"}, but no valid named fields were available for a typed schema.`,
+            },
+          ],
+        });
+      }
     }
     formIndex += 1;
   }
@@ -519,8 +849,7 @@ export function analyzeExternalHtml({
   const title = stripTags(
     html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "",
   );
-  const usableHtml =
-    status >= 200 && status < 300 && isHtmlContentType(contentType);
+  const usableHtml = isHtmlContentType(contentType);
   if (!usableHtml)
     return {
       status: "blocked",
@@ -528,23 +857,30 @@ export function analyzeExternalHtml({
       title,
       tools: [],
       frame,
+      previewHtml: "",
       note: `The site returned HTTP ${status} with ${contentType || "an unsupported content type"}; no tool proposals were created.`,
     };
 
+  const previewHtml = sanitizePreviewHtml(html);
   const used = new Set();
   const native = nativeToolsFromHtml(html, used);
   const inferred = inferredToolsFromHtml(html, used);
   const tools = [...native, ...inferred];
+  const responseContext =
+    status >= 200 && status < 300
+      ? ""
+      : ` The returned page was HTTP ${status}; it was analyzed as evidence only.`;
   return {
     status: tools.length > 0 ? "inspected" : "no_tools",
     url: targetUrl,
     title,
     tools,
     frame,
+    previewHtml,
     note:
       tools.length > 0
-        ? `Inspected the returned page source: ${native.length} potential WebMCP declaration${native.length === 1 ? "" : "s"} and ${inferred.length} interface tool${inferred.length === 1 ? "" : "s"}. External results remain inferred until verified on the live page.`
-        : "The returned page did not expose a readable WebMCP declaration or supported actionable interface evidence.",
+        ? `${responseContext} Inspected the returned page source: ${native.length} potential WebMCP declaration${native.length === 1 ? "" : "s"} and ${inferred.length} interface tool${inferred.length === 1 ? "" : "s"}. External results remain inferred until verified on the live page.`
+        : `${responseContext} The returned page did not expose a readable WebMCP declaration or supported actionable interface evidence.`,
   };
 }
 
@@ -638,12 +974,9 @@ async function fetchWithRedirects(url, fetchImpl, options = {}) {
       });
       if (!REDIRECT_STATUSES.has(response.status)) {
         const contentType = responseHeader(response, "content-type");
-        const html =
-          response.status >= 200 &&
-          response.status < 300 &&
-          isHtmlContentType(contentType)
-            ? await readLimitedText(response, controller.signal)
-            : "";
+        const html = isHtmlContentType(contentType)
+          ? await readLimitedText(response, controller.signal)
+          : "";
         return { response, url: current, html };
       }
       const location = response.headers.get("location");
@@ -802,6 +1135,7 @@ export async function handleExternalDiscovery(request) {
           status: "unknown",
           reason: "The page could not be inspected.",
         },
+        previewHtml: "",
         error: error instanceof Error ? error.message : String(error),
       },
       502,

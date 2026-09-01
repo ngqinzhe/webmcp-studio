@@ -67,6 +67,33 @@ describe("external discovery", () => {
     expect(result.frame).toMatchObject({ status: "blocked" });
   });
 
+  test("extracts actionable HTML from an HTTP challenge response", () => {
+    const result = analyzeExternalHtml({
+      url: "https://reddit.example/",
+      status: 403,
+      contentType: "text/html; charset=utf-8",
+      headers: new Headers({ "x-frame-options": "SAMEORIGIN" }),
+      html: `
+        <html>
+          <head><title>Prove your humanity</title></head>
+          <body>
+            <form method="post">
+              <input name="solution" type="hidden" />
+              <button type="submit">Continue</button>
+            </form>
+          </body>
+        </html>
+      `,
+      studioOrigin: "https://studio.example",
+    });
+
+    expect(result.status).toBe("inspected");
+    expect(result.tools.map((tool) => tool.name)).toContain("submit_form");
+    expect(result.note).toContain("HTTP 403");
+    expect(result.previewHtml).toContain("Prove your humanity");
+    expect(result.previewHtml).not.toMatch(/<script|onclick=/i);
+  });
+
   test("extracts named form fields and empty labeled controls", () => {
     const result = analyzeExternalHtml({
       url: "https://shop.example/",
@@ -140,6 +167,27 @@ describe("external discovery", () => {
       redirect: "manual",
       credentials: "omit",
     });
+  });
+
+  test("keeps a non-2xx HTML body available for evidence extraction", async () => {
+    const result = await inspectExternalSite("https://challenge.example/", {
+      studioOrigin: "https://studio.example",
+      fetchImpl: async () =>
+        new Response(
+          '<html><title>Challenge</title><form><input name="token" /></form></html>',
+          {
+            status: 429,
+            headers: {
+              "content-type": "text/html; charset=utf-8",
+              "x-frame-options": "SAMEORIGIN",
+            },
+          },
+        ),
+    });
+
+    expect(result.status).toBe("inspected");
+    expect(result.tools.map((tool) => tool.name)).toContain("submit_form");
+    expect(result.note).toContain("HTTP 429");
   });
 
   test("keeps the inspection API same-origin and bounded", async () => {
