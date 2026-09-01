@@ -104,12 +104,17 @@
                   <span class="classification-badge badge-inferred"
                     >Inferred</span
                   >
-                  <span>Proposed from page evidence; inspect only</span>
+                  <span
+                    >Proposed from page evidence; composable in Studio
+                    preview</span
+                  >
                 </div>
               </div>
               <div class="library-access-note">
                 <span class="drag-handle" aria-hidden="true">⠿</span>
-                <span>Drag native tools to the workflow canvas</span>
+                <span
+                  >Drag native or inferred tools to the workflow canvas</span
+                >
               </div>
               <div
                 id="discovery-list"
@@ -159,7 +164,7 @@
                       ></ol>
                       <div class="dropzone-callout">
                         <span class="dropzone-icon" aria-hidden="true">+</span>
-                        <span>Drop a native tool to add a step</span>
+                        <span>Drop a discovered tool to add a step</span>
                       </div>
                     </div>
                   </div>
@@ -224,7 +229,7 @@ Select tools to preview the input shape.</pre>
                 <div class="panel-header panel-header-tight">
                   <div>
                     <p class="panel-eyebrow">Saved tool</p>
-                    <h2 id="tools-title">Publish it to the page</h2>
+                    <h2 id="tools-title">Save and use your tool</h2>
                   </div>
                   <span id="generated-count" class="count-pill">0 ready</span>
                 </div>
@@ -232,8 +237,8 @@ Select tools to preview the input shape.</pre>
                   <div class="publish-copy">
                     <span class="publish-mark" aria-hidden="true">↗</span>
                     <span>
-                      <strong>Page WebMCP</strong>
-                      <small
+                      <strong id="publish-mode-title">Page WebMCP</strong>
+                      <small id="publish-mode-copy"
                         >Inject the saved tool into the selected target.</small
                       >
                     </span>
@@ -258,8 +263,8 @@ Select tools to preview the input shape.</pre>
                   </div>
                 </div>
                 <p id="injection-help" class="action-help">
-                  Save a tool, inject it, then test the same handler an agent
-                  can invoke.
+                  Save a tool, publish it when the target is controlled, then
+                  test the handler an agent can invoke.
                 </p>
                 <div id="generated-list" class="generated-list">
                   <div class="empty-panel compact">

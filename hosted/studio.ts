@@ -192,6 +192,16 @@ interface PendingInvocation {
   frameWindow: Window;
 }
 
+interface PendingExternalPreviewRequest {
+  resolve: (value: JsonValue) => void;
+  reject: (reason: unknown) => void;
+  timer: number;
+  toolName: string;
+  generation: number;
+  frameWindow: Window;
+  token: string;
+}
+
 type ExternalPreviewStatus =
   "idle" | "checking" | "visible" | "snapshot" | "blocked";
 
@@ -215,6 +225,42 @@ interface ExternalInspectionResponse {
   previewHtml?: string;
   error?: string;
 }
+
+const EXTERNAL_PREVIEW_CHANNEL = "webmcp-studio-preview";
+const EXTERNAL_PREVIEW_VERSION = 1 as const;
+
+type ExternalPreviewToParentMessage = {
+  channel: typeof EXTERNAL_PREVIEW_CHANNEL;
+  version: typeof EXTERNAL_PREVIEW_VERSION;
+  direction: "preview-to-parent";
+  token: string;
+} & (
+  | { type: "ready" }
+  | {
+      type: "result";
+      requestId: string;
+      toolName: string;
+      result: JsonValue;
+    }
+  | {
+      type: "error";
+      requestId: string;
+      toolName: string;
+      error: { code: string; message: string };
+    }
+);
+
+type ExternalPreviewCommand = {
+  channel: typeof EXTERNAL_PREVIEW_CHANNEL;
+  version: typeof EXTERNAL_PREVIEW_VERSION;
+  direction: "parent-to-preview";
+  type: "invoke";
+  token: string;
+  requestId: string;
+  toolName: string;
+  tool: TargetToolDescriptor;
+  args: JsonValue;
+};
 
 type StudioDragPayload = {
   kind: "primitive" | "workflow";
@@ -462,10 +508,18 @@ function isOutputKey(key: string): boolean {
   );
 }
 
-function hasProducer(names: readonly string[], index: number): boolean {
+function hasProducer(
+  names: readonly string[],
+  index: number,
+  descriptors: readonly TargetToolDescriptor[],
+): boolean {
   return names
     .slice(0, index)
-    .some((name) => /^(search|filter|get_)/.test(name));
+    .some(
+      (name) =>
+        descriptors.find((tool) => tool.name === name)?.source === "webmcp" &&
+        /^(search|filter|get_)/.test(name),
+    );
 }
 
 function buildInputSchema(
@@ -477,7 +531,7 @@ function buildInputSchema(
   names.forEach((name, index) => {
     const descriptor = descriptors.find((tool) => tool.name === name);
     if (!descriptor) return;
-    const producedByEarlierStep = hasProducer(names, index);
+    const producedByEarlierStep = hasProducer(names, index, descriptors);
     for (const [key, schema] of Object.entries(
       schemaProperties(descriptor.inputSchema),
     )) {
@@ -632,6 +686,62 @@ function externalInspectionFromJson(
   };
 }
 
+function isExternalPreviewMessage(
+  value: unknown,
+): value is ExternalPreviewToParentMessage {
+  if (!isRecord(value)) return false;
+  if (
+    value.channel !== EXTERNAL_PREVIEW_CHANNEL ||
+    value.version !== EXTERNAL_PREVIEW_VERSION ||
+    value.direction !== "preview-to-parent" ||
+    typeof value.token !== "string" ||
+    typeof value.type !== "string"
+  )
+    return false;
+  if (value.type === "ready") return true;
+  if (
+    value.type === "result" &&
+    typeof value.requestId === "string" &&
+    typeof value.toolName === "string"
+  )
+    return isJsonValue(value.result);
+  return (
+    value.type === "error" &&
+    typeof value.requestId === "string" &&
+    typeof value.toolName === "string" &&
+    isRecord(value.error) &&
+    typeof value.error.code === "string" &&
+    typeof value.error.message === "string"
+  );
+}
+
+/**
+ * Build a safe, Studio-owned snapshot runtime for inferred external tools.
+ * The fetched HTML has already been sanitized by the inspection service. This
+ * adapter only fills visible controls, highlights evidence, and reports a
+ * local state change; it never loads third-party scripts or sends a request
+ * to the external origin.
+ */
+function interactiveExternalPreviewHtml(html: string, token: string): string {
+  const safeToken = token.replace(/[&<>"']/g, (character) => {
+    const entities: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    };
+    return entities[character] ?? character;
+  });
+  const tokenMeta = `<meta name="webmcp-studio-preview-token" content="${safeToken}">`;
+  const scriptTag =
+    '<script src="/assets/external-preview-runtime.js"></script>';
+  if (/<head\b[^>]*>/i.test(html)) {
+    return html.replace(/(<head\b[^>]*>)/i, `$1${tokenMeta}${scriptTag}`);
+  }
+  return `${tokenMeta}${scriptTag}${html}`;
+}
+
 function materializeSchemaDefaults(
   value: unknown,
   schema: JSONSchema,
@@ -649,6 +759,62 @@ function materializeSchemaDefaults(
       const withDefault = materializeSchemaDefaults(undefined, propertySchema);
       if (withDefault !== undefined) result[key] = withDefault;
     }
+  }
+  return result;
+}
+
+function previewDefaultForSchema(key: string, schema: JSONSchema): JsonValue {
+  if (schema.default !== undefined) return schema.default;
+  if (schema.enum?.length) return schema.enum[0] ?? null;
+  const type = Array.isArray(schema.type) ? schema.type[0] : schema.type;
+  if (type === "string") {
+    const normalized = key.toLowerCase();
+    let value = /(?:origin|from|departure)/.test(normalized)
+      ? "Singapore"
+      : /(?:destination|to|arrival)/.test(normalized)
+        ? "Tokyo"
+        : /(?:email)/.test(normalized)
+          ? "demo@example.com"
+          : /(?:id|sku|slug)/.test(normalized)
+            ? "preview-item"
+            : "keyboard";
+    while (schema.minLength !== undefined && value.length < schema.minLength)
+      value += "-demo";
+    if (schema.maxLength !== undefined)
+      value = value.slice(0, schema.maxLength);
+    return value || "x";
+  }
+  if (type === "number" || type === "integer") {
+    const preferred = /(?:price|amount|cost|max|min)/.test(key.toLowerCase())
+      ? 200
+      : 1;
+    const minimum = schema.minimum ?? Number.NEGATIVE_INFINITY;
+    const maximum = schema.maximum ?? Number.POSITIVE_INFINITY;
+    const value = Math.max(minimum, Math.min(maximum, preferred));
+    return type === "integer" ? Math.round(value) : value;
+  }
+  if (type === "boolean") return true;
+  if (type === "array") return [];
+  if (type === "object") {
+    const result: Record<string, JsonValue> = {};
+    for (const property of schema.required ?? []) {
+      const propertySchema = schema.properties?.[property];
+      if (propertySchema)
+        result[property] = previewDefaultForSchema(property, propertySchema);
+    }
+    return result;
+  }
+  return null;
+}
+
+function previewInputForSchema(schema: JSONSchema): JsonValue {
+  const result: Record<string, JsonValue> = {};
+  for (const [key, propertySchema] of Object.entries(schema.properties ?? {})) {
+    if (
+      (schema.required ?? []).includes(key) ||
+      propertySchema.default !== undefined
+    )
+      result[key] = previewDefaultForSchema(key, propertySchema);
   }
   return result;
 }
@@ -736,6 +902,10 @@ export class HostedStudio {
     string,
     PendingGeneratedRequest
   >();
+  private readonly pendingExternalPreview = new Map<
+    string,
+    PendingExternalPreviewRequest
+  >();
   private readonly pageRegistrations = new Map<string, PageToolRegistration>();
   private readonly generated = new Map<string, GeneratedTool>();
   private readonly workflowRunner = new WorkflowRunner();
@@ -765,6 +935,10 @@ export class HostedStudio {
     message: "",
   };
   private externalPreviewTimer: number | null = null;
+  private externalPreviewToken = "";
+  private externalPreviewReady = false;
+  private externalPreviewReadyResolver: (() => void) | null = null;
+  private externalPreviewReadyPromise: Promise<void> = Promise.resolve();
   private activeDrag: StudioDragPayload | null = null;
   private pointerDrag: PointerDragState | null = null;
   private pointerDropRow: HTMLElement | null = null;
@@ -802,6 +976,7 @@ export class HostedStudio {
     this.targetGeneration += 1;
     this.cancelPointerDrag();
     this.clearExternalPreviewTimer();
+    this.resetExternalPreviewBridge();
     this.nativeAbort.abort();
     for (const controller of this.registrationControllers.values())
       if (controller !== this.nativeAbort) controller.abort();
@@ -1080,7 +1255,7 @@ export class HostedStudio {
       note.id = "site-note";
       note.className = "site-note";
       note.textContent =
-        "Use a controlled target for live tools, or any http(s) site for potential-only analysis.";
+        "Use any http(s) site to discover inferred tools; Studio can run them in a safe local preview, while live page injection remains same-origin or extension-only.";
       form.append(note);
       const workspaceHeading =
         this.documentValue.querySelector(".workspace-heading");
@@ -1263,6 +1438,7 @@ export class HostedStudio {
     this.targetReadyResolver?.();
     this.targetReadyResolver = null;
     this.clearExternalPreviewTimer();
+    this.resetExternalPreviewBridge();
     this.cancelPendingRequests(
       "stale_request",
       "The target changed before the previous tool request completed.",
@@ -1315,7 +1491,7 @@ export class HostedStudio {
     }, 12_000);
     this.renderAll();
     this.showSiteMessage(
-      `Inspecting ${this.targetIdentity.name}… external tools remain potential-only.`,
+      `Inspecting ${this.targetIdentity.name}… inferred tools can be composed and run in a safe Studio preview.`,
       false,
     );
     try {
@@ -1338,14 +1514,14 @@ export class HostedStudio {
           ? inspection.frame.reason
           : inspection.frame.reason ||
             "Preview loaded when the external site permits framing.",
-        ...(hasSnapshot ? { previewHtml } : {}),
+        ...(previewHtml ? { previewHtml } : {}),
       };
       this.clearExternalPreviewTimer();
       if (hasSnapshot) {
-        this.targetFrame.removeAttribute("src");
-        this.targetFrame.setAttribute("sandbox", "");
-        this.targetFrame.srcdoc = previewHtml;
-        this.targetFrame.hidden = false;
+        this.setExternalPreviewSnapshot(
+          previewHtml,
+          "Interactive local snapshot ready. Inferred actions run here without contacting the external site.",
+        );
       } else {
         this.targetFrame.removeAttribute("srcdoc");
         this.targetFrame.removeAttribute("sandbox");
@@ -1356,8 +1532,10 @@ export class HostedStudio {
       this.renderAll();
       const count = this.potentialTools.length;
       const snapshotNote = hasSnapshot
-        ? " Showing a read-only snapshot because the site blocks embedded previews."
-        : "";
+        ? " Showing an interactive local snapshot because the site blocks embedded previews."
+        : previewHtml
+          ? " Run preview switches to a safe local snapshot so inferred actions can be shown."
+          : "";
       this.showSiteMessage(
         `${this.targetIdentity.name}: ${count} inferred potential tool${count === 1 ? "" : "s"}. ${inspection.note}${blocked ? ` ${inspection.frame.reason}` : ""}${snapshotNote}`,
         false,
@@ -1421,6 +1599,170 @@ export class HostedStudio {
         "The hosted inspection service returned an invalid result.",
       );
     return inspection;
+  }
+
+  private resetExternalPreviewBridge(): void {
+    this.externalPreviewReadyResolver?.();
+    this.externalPreviewReadyResolver = null;
+    this.externalPreviewReady = false;
+    this.externalPreviewToken = "";
+  }
+
+  private setExternalPreviewSnapshot(
+    previewHtml: string,
+    message = "Interactive local snapshot ready. Inferred actions run here without contacting the external site.",
+  ): void {
+    const token = randomId("external-preview");
+    this.externalPreviewToken = token;
+    this.externalPreviewReady = false;
+    this.externalPreviewReadyPromise = new Promise<void>((resolve) => {
+      this.externalPreviewReadyResolver = resolve;
+    });
+    this.externalPreview = {
+      ...this.externalPreview,
+      status: "snapshot",
+      message,
+      previewHtml,
+    };
+    this.targetFrame.removeAttribute("src");
+    // The sandbox deliberately keeps the snapshot on an opaque origin. The
+    // tokenized bridge below is the only way the Studio can ask its own
+    // preview adapter to apply a declarative inferred action.
+    this.targetFrame.setAttribute("sandbox", "allow-scripts");
+    this.targetFrame.srcdoc = interactiveExternalPreviewHtml(
+      previewHtml,
+      token,
+    );
+    this.targetFrame.hidden = false;
+  }
+
+  private async ensureExternalPreviewSnapshot(): Promise<boolean> {
+    if (this.targetScope !== "external") return false;
+    const previewHtml = this.externalPreview.previewHtml?.trim() || "";
+    if (!previewHtml) return false;
+    if (
+      this.externalPreview.status !== "snapshot" ||
+      !this.externalPreviewToken
+    ) {
+      this.setExternalPreviewSnapshot(previewHtml);
+      this.renderAll();
+    }
+    const token = this.externalPreviewToken;
+    const frameWindow = this.targetFrame.contentWindow;
+    if (!token || !frameWindow) return false;
+    if (!this.externalPreviewReady) {
+      await Promise.race([
+        this.externalPreviewReadyPromise,
+        new Promise<void>((resolve) => {
+          this.pageWindow.setTimeout(resolve, 5_000);
+        }),
+      ]);
+    }
+    const ready =
+      this.targetScope === "external" &&
+      token === this.externalPreviewToken &&
+      frameWindow === this.targetFrame.contentWindow &&
+      this.externalPreviewReady;
+    return ready;
+  }
+
+  private async invokeExternalPreview(
+    name: string,
+    args: unknown,
+  ): Promise<JsonValue> {
+    const descriptor = this.potentialTools.find((tool) => tool.name === name);
+    if (!descriptor)
+      throw {
+        code: "unknown_tool",
+        message: `Inferred tool ${name} is not available for this snapshot.`,
+      };
+    if (!(await this.ensureExternalPreviewSnapshot()))
+      throw {
+        code: "execution_failed",
+        message:
+          "The inferred preview snapshot is unavailable. Re-run analysis to load an interactive snapshot.",
+      };
+    const frameWindow = this.targetFrame.contentWindow;
+    const token = this.externalPreviewToken;
+    if (!frameWindow || !token)
+      throw {
+        code: "execution_failed",
+        message: "The inferred preview frame is not available.",
+      };
+    const generation = this.targetGeneration;
+    const requestId = randomId("external-preview-call");
+    const message: ExternalPreviewCommand = {
+      channel: EXTERNAL_PREVIEW_CHANNEL,
+      version: EXTERNAL_PREVIEW_VERSION,
+      direction: "parent-to-preview",
+      type: "invoke",
+      token,
+      requestId,
+      toolName: name,
+      tool: descriptor,
+      args: asJsonValue(parseArguments(args)),
+    };
+    return new Promise<JsonValue>((resolve, reject) => {
+      const timer = this.pageWindow.setTimeout(() => {
+        this.pendingExternalPreview.delete(requestId);
+        reject({
+          code: "execution_timeout",
+          message: `Inferred preview tool ${name} timed out.`,
+        });
+      }, 15_000);
+      this.pendingExternalPreview.set(requestId, {
+        resolve,
+        reject,
+        timer,
+        toolName: name,
+        generation,
+        frameWindow,
+        token,
+      });
+      try {
+        // The sandboxed srcdoc intentionally has an opaque origin, so a
+        // random session token plus the exact frame window is the authority.
+        frameWindow.postMessage(message, "*");
+      } catch {
+        this.pendingExternalPreview.delete(requestId);
+        this.pageWindow.clearTimeout(timer);
+        reject({
+          code: "execution_failed",
+          message: "The inferred preview frame could not receive the action.",
+        });
+      }
+    });
+  }
+
+  private handleExternalPreviewMessage(event: MessageEvent<unknown>): boolean {
+    if (
+      this.targetScope !== "external" ||
+      event.source !== this.targetFrame.contentWindow ||
+      event.origin !== "null"
+    )
+      return false;
+    const message = isExternalPreviewMessage(event.data) ? event.data : null;
+    if (!message || message.token !== this.externalPreviewToken) return false;
+    if (message.type === "ready") {
+      this.externalPreviewReady = true;
+      this.externalPreviewReadyResolver?.();
+      this.externalPreviewReadyResolver = null;
+      return true;
+    }
+    const pending = this.pendingExternalPreview.get(message.requestId);
+    if (!pending) return true;
+    if (
+      pending.generation !== this.targetGeneration ||
+      pending.frameWindow !== this.targetFrame.contentWindow ||
+      pending.token !== message.token ||
+      pending.toolName !== message.toolName
+    )
+      return true;
+    this.pendingExternalPreview.delete(message.requestId);
+    this.pageWindow.clearTimeout(pending.timer);
+    if (message.type === "result") pending.resolve(message.result);
+    else pending.reject(message.error);
+    return true;
   }
 
   private nativeTargetTools(): TargetToolDescriptor[] {
@@ -1799,6 +2141,11 @@ export class HostedStudio {
       this.pageWindow.clearTimeout(pending.timer);
       pending.reject(error);
     }
+    for (const [requestId, pending] of this.pendingExternalPreview) {
+      this.pendingExternalPreview.delete(requestId);
+      this.pageWindow.clearTimeout(pending.timer);
+      pending.reject(error);
+    }
   }
 
   private generatedDescriptor(tool: GeneratedTool): TargetToolDescriptor {
@@ -1809,7 +2156,9 @@ export class HostedStudio {
       annotations: {
         destructiveHint: tool.primitiveNames.some((primitive) =>
           targetToolIsMutating(
-            this.targetTools.find((candidate) => candidate.name === primitive),
+            this.workflowToolDescriptors().find(
+              (candidate) => candidate.name === primitive,
+            ),
           ),
         ),
       },
@@ -1913,12 +2262,12 @@ export class HostedStudio {
     if (this.targetScope !== "controlled") {
       this.setPublication(name, {
         status: "failed",
-        mode: "unavailable",
+        mode: "preview",
         message:
-          "External sites are potential-only. Hosted Studio never injects into a third-party origin.",
+          "This tool is saved and runnable in the Studio snapshot, but hosted Studio cannot inject into a third-party origin.",
       });
       this.showComposerMessage(
-        "This is a potential tool. Use the optional extension adapter for external-site instrumentation.",
+        "Live external injection needs the optional extension adapter. Run preview to execute this inferred workflow in Studio.",
         true,
       );
       return false;
@@ -2079,23 +2428,27 @@ export class HostedStudio {
       this.showComposerMessage("Generate a tool before testing it.", true);
       return;
     }
-    if (this.targetScope !== "controlled") {
+    const externalPreview = this.targetScope === "external";
+    const controlledPreview =
+      this.targetScope === "controlled" && this.targetMode === "preview";
+    if (externalPreview && !(await this.ensureExternalPreviewSnapshot())) {
       this.showComposerMessage(
-        "Potential tools cannot be executed by hosted Studio on external sites.",
+        "The inferred tool is saved, but this site did not provide a preview snapshot to run.",
         true,
       );
       return;
     }
-    const controlledPreview = this.targetMode === "preview";
     if (!controlledPreview && generated.publication.status !== "injected") {
-      const injected = await this.injectGeneratedTool(name);
-      if (!injected) {
-        this.showComposerMessage(
-          generated.publication.message ??
-            "Inject the generated tool into the target page before testing it.",
-          true,
-        );
-        return;
+      if (!externalPreview) {
+        const injected = await this.injectGeneratedTool(name);
+        if (!injected) {
+          this.showComposerMessage(
+            generated.publication.message ??
+              "Inject the generated tool into the target page before testing it.",
+            true,
+          );
+          return;
+        }
       }
     }
     const current = this.generated.get(name);
@@ -2104,13 +2457,13 @@ export class HostedStudio {
       ...current.publication,
       status: "testing",
     });
-    const input = this.defaultInputForTarget();
+    const input = this.defaultInputForTarget(generated);
     let result: JsonValue | null = null;
     try {
-      if (controlledPreview) {
-        // A controlled target without native WebMCP still exposes the same
-        // primitive bridge. Run the structured workflow directly so the
-        // preview button is useful even when page publication is unavailable.
+      if (controlledPreview || externalPreview) {
+        // Preview targets execute the same structured workflow as a published
+        // page tool. External targets use the Studio-owned snapshot adapter;
+        // no third-party origin is contacted.
         result = await this.executeGenerated(name, input);
       } else {
         result = await this.requestPageGeneratedTest(name, input);
@@ -2124,19 +2477,15 @@ export class HostedStudio {
     const latest = this.generated.get(name);
     if (latest) {
       const succeeded = isRecord(result) && result.success === true;
+      const previewRun = controlledPreview || externalPreview;
       this.setPublication(name, {
         ...latest.publication,
-        status: succeeded
-          ? latest.publication.mode === "unavailable"
-            ? "generated"
-            : "injected"
-          : "failed",
-        ...(succeeded &&
-        controlledPreview &&
-        latest.publication.mode === "unavailable"
+        status: succeeded ? (previewRun ? "generated" : "injected") : "failed",
+        ...(succeeded && previewRun
           ? {
-              message:
-                "Preview ran against the controlled target. Inject the tool when native page WebMCP is available.",
+              message: externalPreview
+                ? "Inferred preview ran against the Studio-owned snapshot. Use the optional extension to instrument the live external page."
+                : "Preview ran against the controlled target. Inject the tool when native page WebMCP is available.",
             }
           : {}),
         ...(succeeded
@@ -2162,7 +2511,7 @@ export class HostedStudio {
       {
         name: "discover_site_tools",
         description:
-          "Discover Native WebMCP primitives from a controlled site path, or return clearly labeled Inferred potential tools for an external http(s) site.",
+          "Discover native WebMCP primitives from a controlled site path, or return clearly labeled inferred tools from an external http(s) page for composition and safe Studio preview.",
         inputSchema: {
           type: "object",
           properties: {
@@ -2176,7 +2525,7 @@ export class HostedStudio {
               type: "string",
               format: "uri",
               description:
-                "Optional external URL to analyze as potential-only; it is never made executable by hosted Studio.",
+                "Optional external URL to analyze for inferred tools. The hosted Studio can preview them against a sanitized local snapshot, but cannot inject into the third-party origin.",
             },
           },
           additionalProperties: false,
@@ -2208,7 +2557,7 @@ export class HostedStudio {
                 status: "potential",
                 provenance: "inferred",
                 tools: potential,
-                note: "Potential proposals are based on the fetched page source and observed interface evidence. They are not executable without the optional extension adapter.",
+                note: "Inferred tools are based on fetched page source and interface evidence. They can be composed and executed against a Studio-owned snapshot; live third-party injection needs the optional extension adapter.",
               });
             }
             await this.selectTarget(resolution.id);
@@ -2232,7 +2581,7 @@ export class HostedStudio {
               status: "potential",
               provenance: "inferred",
               tools: potential,
-              note: "Potential proposals are based on the fetched page source and observed interface evidence. They are not executable without the optional extension adapter.",
+              note: "Inferred tools are based on fetched page source and interface evidence. They can be composed and executed against a Studio-owned snapshot; live third-party injection needs the optional extension adapter.",
             });
           }
           return asJsonValue({
@@ -2247,7 +2596,7 @@ export class HostedStudio {
       {
         name: "inspect_tool",
         description:
-          "Inspect one controlled target primitive and its typed schema.",
+          "Inspect one discovered native or inferred WebMCP capability and its typed schema.",
         inputSchema: {
           type: "object",
           properties: { name: { type: "string", minLength: 1 } },
@@ -2283,7 +2632,7 @@ export class HostedStudio {
       {
         name: "compose_workflow",
         description:
-          "Compose an ordered structured workflow from unique discovered WebMCP tool names. External inferred tools create a potential proposal and remain non-executable in hosted Studio.",
+          "Compose an ordered structured workflow from unique discovered native or inferred WebMCP tool names.",
         inputSchema: {
           type: "object",
           properties: {
@@ -2347,7 +2696,7 @@ export class HostedStudio {
       {
         name: "execute_workflow",
         description:
-          "Execute one generated workflow against the controlled target.",
+          "Execute one generated workflow against the controlled target, or against the Studio-owned snapshot for inferred external tools.",
         inputSchema: {
           type: "object",
           properties: {
@@ -2537,6 +2886,11 @@ export class HostedStudio {
   }
 
   private persistGeneratedTools(): void {
+    // External workflows are backed by a URL-specific fetched snapshot and
+    // are intentionally session-memory only. Do not store them under the
+    // previously selected controlled target's key, where they could be
+    // restored as if they were live page workflows after navigation.
+    if (this.targetScope === "external") return;
     const storage = this.sessionStorage();
     if (!storage) return;
     try {
@@ -2662,6 +3016,7 @@ export class HostedStudio {
     this.targetReadyResolver?.();
     this.targetReadyResolver = null;
     this.clearExternalPreviewTimer();
+    this.resetExternalPreviewBridge();
     this.cancelPendingRequests(
       "stale_request",
       "The target changed before the previous tool request completed.",
@@ -2714,6 +3069,7 @@ export class HostedStudio {
   private async handleTargetMessage(
     event: MessageEvent<unknown>,
   ): Promise<void> {
+    if (this.handleExternalPreviewMessage(event)) return;
     const generatedMessage = isGeneratedTargetMessage(event.data)
       ? event.data
       : null;
@@ -3130,12 +3486,7 @@ export class HostedStudio {
     const name = stringValue(args.name).trim().toLowerCase();
     const description = stringValue(args.description).trim();
     const requestedPrimitiveNames = args.primitiveNames ?? this.draftNames;
-    if (this.targetScope !== "controlled")
-      return {
-        success: false,
-        message:
-          "External sites are potential-only. Select a same-origin controlled target before generating a live tool.",
-      };
+    const descriptors = this.workflowToolDescriptors();
     const requestedNames = Array.isArray(requestedPrimitiveNames)
       ? requestedPrimitiveNames.filter(
           (value): value is string => typeof value === "string",
@@ -3155,12 +3506,12 @@ export class HostedStudio {
     if (primitiveNames.length === 0)
       return {
         success: false,
-        message: "Select at least one controlled primitive first.",
+        message: "Select at least one discovered tool first.",
       };
     if (unknown.length > 0)
       return {
         success: false,
-        message: `Unknown primitive(s): ${unknown.join(", ")}. Discover the target again and choose live primitives.`,
+        message: `Unknown primitive(s): ${unknown.join(", ")}. Discover the target again and choose tools from the library.`,
       };
     if (duplicates.length > 0)
       return {
@@ -3175,13 +3526,13 @@ export class HostedStudio {
     const hasSchemaOverride = args.inputSchema !== undefined;
     const inputSchema = hasSchemaOverride
       ? editableSchema(args.inputSchema)
-      : workflowInputSchema(this.targetId, primitiveNames, this.targetTools);
+      : workflowInputSchema(this.targetId, primitiveNames, descriptors);
     if (!inputSchema)
       return {
         success: false,
         message: "The edited input schema must be valid JSON Schema.",
       };
-    const workflow = hostedWorkflow(primitiveNames, this.targetTools);
+    const workflow = hostedWorkflow(primitiveNames, descriptors);
     const definitionError = this.validateGeneratedDefinition(
       name,
       description,
@@ -3202,7 +3553,7 @@ export class HostedStudio {
         annotations: {
           destructiveHint: primitiveNames.some((primitive) =>
             targetToolIsMutating(
-              this.targetTools.find((tool) => tool.name === primitive),
+              descriptors.find((tool) => tool.name === primitive),
             ),
           ),
         },
@@ -3219,9 +3570,11 @@ export class HostedStudio {
       native,
       publication: {
         status: "generated",
-        mode: "unavailable",
+        mode: this.targetScope === "external" ? "preview" : "unavailable",
         message:
-          "Generated for this session. Publish it to the target page before testing the page-level tool.",
+          this.targetScope === "external"
+            ? "Saved from inferred page evidence. Run preview to execute it against the Studio-owned snapshot; live external injection needs the optional extension."
+            : "Generated for this session. Publish it to the target page before testing the page-level tool.",
       },
     };
     this.generated.set(name, generated);
@@ -3272,7 +3625,10 @@ export class HostedStudio {
           ): Promise<ExecutionResult> => {
             const url = currentPageUrl(this.pageWindow);
             try {
-              const output = await this.invokeTarget(capabilityId, args);
+              const output =
+                this.targetScope === "external"
+                  ? await this.invokeExternalPreview(capabilityId, args)
+                  : await this.invokeTarget(capabilityId, args);
               if (
                 isRecord(output) &&
                 (output.ok === false || output.success === false)
@@ -3322,17 +3678,20 @@ export class HostedStudio {
     );
     const trace = workflowTrace(generated.workflow, result.trace);
     const stateChanged =
-      generated.primitiveNames.some((primitive) =>
+      result.success &&
+      (generated.primitiveNames.some((primitive) =>
         targetToolIsMutating(
-          this.targetTools.find((tool) => tool.name === primitive),
+          this.workflowToolDescriptors().find(
+            (tool) => tool.name === primitive,
+          ),
         ),
       ) ||
-      result.trace.some(
-        (entry) =>
-          entry.type === "dom" &&
-          isRecord(entry.output) &&
-          entry.output.stateChanged === true,
-      );
+        result.trace.some(
+          (entry) =>
+            entry.type === "dom" &&
+            isRecord(entry.output) &&
+            entry.output.stateChanged === true,
+        ));
     const navigationOccurred = result.trace.some(
       (entry) =>
         entry.type === "dom" &&
@@ -3368,7 +3727,9 @@ export class HostedStudio {
     return output;
   }
 
-  private defaultInputForTarget(): JsonValue {
+  private defaultInputForTarget(generated?: GeneratedTool): JsonValue {
+    if (this.targetScope === "external" && generated)
+      return previewInputForSchema(generated.inputSchema);
     return this.targetId === "commerce"
       ? {
           requirements: DEFAULT_INPUT.requirements,
@@ -3420,7 +3781,7 @@ export class HostedStudio {
       source.className = "source-pill potential";
       source.textContent = isNative
         ? "Declaration · verify live"
-        : "Potential only";
+        : "Inferred proposal";
       const classification = this.documentValue.createElement("span");
       classification.className = `classification-badge badge-${
         isNative ? "native" : "inferred"
@@ -3433,7 +3794,7 @@ export class HostedStudio {
       details.className = "discovery-card-details";
       const status = this.documentValue.createElement("span");
       status.className = "evidence-chip";
-      status.textContent = "not executable here";
+      status.textContent = "runs in Studio snapshot preview";
       const confidence = this.documentValue.createElement("span");
       confidence.className = "evidence-chip";
       confidence.textContent = `confidence ${Math.round((tool.confidence ?? 0) * 100)}%`;
@@ -3449,10 +3810,10 @@ export class HostedStudio {
       add.dataset.action = "add-to-workflow";
       add.dataset.name = tool.name;
       add.disabled = this.draftNames.includes(tool.name);
-      add.setAttribute("aria-label", `Add ${tool.name} to workflow proposal`);
+      add.setAttribute("aria-label", `Add ${tool.name} to workflow`);
       add.textContent = this.draftNames.includes(tool.name)
-        ? "Added to proposal"
-        : "Add as proposal";
+        ? "Added to workflow"
+        : "Add to workflow";
       details.append(status, confidence, evidence, schemaPreview, add);
       card.append(head, details);
       list.append(card);
@@ -3515,13 +3876,13 @@ export class HostedStudio {
         this.targetScope === "controlled"
           ? "controlled target"
           : this.externalPreview.status === "snapshot"
-            ? "read-only snapshot"
+            ? "interactive snapshot"
             : "external preview";
     this.targetFrame.title =
       this.targetScope === "controlled"
         ? "Live controlled target website"
         : this.externalPreview.status === "snapshot"
-          ? "Read-only external site snapshot"
+          ? "Interactive external site snapshot"
           : "External site preview";
   }
 
@@ -3581,7 +3942,7 @@ export class HostedStudio {
     );
     if (legendNote)
       legendNote.textContent =
-        "Proposed from page evidence; may be composed, never executed here";
+        "Proposed from page evidence; composable and runnable in Studio preview";
     const accessNote = optionalElement<HTMLElement>(
       this.documentValue,
       "discovery-list",
@@ -3591,7 +3952,7 @@ export class HostedStudio {
     if (accessNote)
       accessNote.textContent =
         this.targetScope === "external"
-          ? "Drag inferred tools to draft a potential workflow"
+          ? "Drag inferred tools to the workflow canvas"
           : "Drag native or inferred tools to the workflow canvas";
     for (const tool of discoveredTools) {
       const isNative = discoveryProvenance(tool) === "native";
@@ -3683,7 +4044,7 @@ export class HostedStudio {
         ? "Added to workflow"
         : isNative
           ? "Add to workflow"
-          : "Add as proposal";
+          : "Add to workflow";
       details.append(
         effect,
         schema,
@@ -3737,7 +4098,7 @@ export class HostedStudio {
       placeholder.className = "flow-placeholder";
       placeholder.textContent =
         this.targetScope === "external"
-          ? "Drag an inferred tool here to draft a proposal."
+          ? "Drag an inferred tool here to add a step."
           : "Drag a discovered tool from the library to start.";
       flow.append(placeholder);
     } else {
@@ -3811,7 +4172,7 @@ export class HostedStudio {
     if (callout)
       callout.textContent =
         this.targetScope === "external"
-          ? "Drop a tool to add a proposal step"
+          ? "Drop an inferred tool to add a step"
           : "Drop a discovered tool to add a step";
     element<HTMLElement>(this.documentValue, "flow-count").textContent =
       `${this.draftNames.length} step${this.draftNames.length === 1 ? "" : "s"}`;
@@ -3827,6 +4188,7 @@ export class HostedStudio {
     const list = element<HTMLElement>(this.documentValue, "generated-list");
     list.replaceChildren();
     for (const tool of this.generated.values()) {
+      const external = this.targetScope === "external";
       const card = this.documentValue.createElement("article");
       card.className = "generated-tool";
       card.dataset.name = tool.name;
@@ -3839,8 +4201,9 @@ export class HostedStudio {
       meta.className = "generated-tool-meta";
       const mode = this.documentValue.createElement("span");
       mode.className = tool.publication.mode === "native" ? "live" : "";
-      mode.textContent =
-        tool.publication.mode === "native"
+      mode.textContent = external
+        ? "Studio snapshot preview"
+        : tool.publication.mode === "native"
           ? "page WebMCP registered"
           : tool.publication.mode === "preview"
             ? "page preview handler"
@@ -3861,12 +4224,17 @@ export class HostedStudio {
       inject.dataset.action = "inject-generated";
       inject.dataset.toolName = tool.name;
       inject.disabled =
+        external ||
         tool.publication.status === "injecting" ||
         tool.publication.status === "testing";
-      inject.textContent =
-        tool.publication.status === "injected"
+      inject.textContent = external
+        ? "Inject needs extension"
+        : tool.publication.status === "injected"
           ? "Re-inject"
           : "Inject into page";
+      if (external)
+        inject.title =
+          "Hosted Studio cannot inject into a third-party origin. Use the optional extension for live instrumentation.";
       const test = this.documentValue.createElement("button");
       test.className = "button button-primary test-tool-button";
       test.type = "button";
@@ -3899,7 +4267,9 @@ export class HostedStudio {
     element<HTMLElement>(this.documentValue, "generated-count").textContent =
       this.generated.size === 0
         ? "0 ready"
-        : `${injectedCount} injected · ${this.generated.size} ready`;
+        : this.targetScope === "external"
+          ? `${this.generated.size} ready`
+          : `${injectedCount} injected · ${this.generated.size} ready`;
     const latest =
       Array.from(this.generated.keys()).at(-1) ??
       stringValue(
@@ -3919,9 +4289,17 @@ export class HostedStudio {
     );
     if (injectButton) {
       injectButton.disabled =
+        this.targetScope === "external" ||
         !latestTool ||
         latestTool.publication.status === "injecting" ||
         latestTool.publication.status === "testing";
+      injectButton.textContent =
+        this.targetScope === "external"
+          ? "Inject needs extension"
+          : "Inject into page";
+      if (this.targetScope === "external")
+        injectButton.title =
+          "Hosted Studio cannot inject into a third-party origin. Use the optional extension for live instrumentation.";
     }
     if (testButton) {
       testButton.disabled =
@@ -3939,11 +4317,29 @@ export class HostedStudio {
     );
     if (help) {
       help.textContent = latestTool
-        ? latestTool.publication.mode === "native"
-          ? "Registered on the target page. Test the same WebMCP handler an agent can invoke."
-          : "Native WebMCP is unavailable in this browser. Run the controlled preview; it uses the same workflow and visible page effects."
+        ? this.targetScope === "external"
+          ? "Saved from inferred evidence. Run preview to execute the workflow against the safe snapshot; live external injection needs the optional extension."
+          : latestTool.publication.mode === "native"
+            ? "Registered on the target page. Test the same WebMCP handler an agent can invoke."
+            : "Native WebMCP is unavailable in this browser. Run the controlled preview; it uses the same workflow and visible page effects."
         : "Save a tool first. Its page publication and test actions will appear here.";
     }
+    const modeTitle = optionalElement<HTMLElement>(
+      this.documentValue,
+      "publish-mode-title",
+    );
+    const modeCopy = optionalElement<HTMLElement>(
+      this.documentValue,
+      "publish-mode-copy",
+    );
+    if (modeTitle)
+      modeTitle.textContent =
+        this.targetScope === "external" ? "Studio preview" : "Page WebMCP";
+    if (modeCopy)
+      modeCopy.textContent =
+        this.targetScope === "external"
+          ? "Run the saved tool on a safe local snapshot of the inspected page."
+          : "Inject the saved tool into the selected target.";
   }
 
   private publicationLabel(publication: GeneratedPublication): string {
@@ -4020,7 +4416,11 @@ function workflowInputSchema(
   names: readonly string[],
   descriptors: readonly TargetToolDescriptor[],
 ): JSONSchema {
-  if (targetId === "commerce" && names.includes("search_products")) {
+  const hasNativeSearchProducts = descriptors.some(
+    (tool) =>
+      tool.name === "search_products" && discoveryProvenance(tool) === "native",
+  );
+  if (targetId === "commerce" && hasNativeSearchProducts) {
     return {
       type: "object",
       properties: {
@@ -4048,7 +4448,11 @@ function workflowInputSchema(
       additionalProperties: false,
     };
   }
-  if (targetId === "travel" && names.includes("search_options")) {
+  const hasNativeSearchOptions = descriptors.some(
+    (tool) =>
+      tool.name === "search_options" && discoveryProvenance(tool) === "native",
+  );
+  if (targetId === "travel" && hasNativeSearchOptions) {
     return {
       type: "object",
       properties: {
@@ -4081,17 +4485,24 @@ function hostedWorkflow(
       const previousId = index > 0 ? `step-${index}` : null;
       const previousName = index > 0 ? names[index - 1] : undefined;
       const bindings: Record<string, Binding> = {};
+      const descriptor = descriptors.find(
+        (tool) => tool.name === primitiveName,
+      );
+      const isNativeTargetPrimitive = descriptor?.source === "webmcp";
       const outputFromPrevious = (path: string): Binding | null =>
         previousId ? bindingOutput(previousId, path) : null;
-      if (primitiveName === "search_products") {
+      if (isNativeTargetPrimitive && primitiveName === "search_products") {
         bindings.query = bindingInput("requirements");
-      } else if (primitiveName === "filter_products") {
+      } else if (
+        isNativeTargetPrimitive &&
+        primitiveName === "filter_products"
+      ) {
         bindings.maxPrice = bindingInput(
           names.includes("search_products") ? "max_price" : "maxPrice",
         );
         if (!names.includes("search_products"))
           bindings.category = bindingInput("category");
-      } else if (primitiveName === "get_product") {
+      } else if (isNativeTargetPrimitive && primitiveName === "get_product") {
         const productId =
           previousName === "get_product"
             ? outputFromPrevious("product.id")
@@ -4101,7 +4512,7 @@ function hostedWorkflow(
               : null;
         if (productId) bindings.productId = productId;
         else bindings.productId = bindingInput("productId");
-      } else if (primitiveName === "add_to_cart") {
+      } else if (isNativeTargetPrimitive && primitiveName === "add_to_cart") {
         const productId =
           previousName === "get_product"
             ? outputFromPrevious("product.id")
@@ -4112,10 +4523,16 @@ function hostedWorkflow(
         if (productId) bindings.productId = productId;
         else bindings.productId = bindingInput("productId");
         bindings.quantity = bindingInput("quantity");
-      } else if (primitiveName === "search_options") {
+      } else if (
+        isNativeTargetPrimitive &&
+        primitiveName === "search_options"
+      ) {
         bindings.origin = bindingInput("origin");
         bindings.destination = bindingInput("destination");
-      } else if (primitiveName === "filter_options") {
+      } else if (
+        isNativeTargetPrimitive &&
+        primitiveName === "filter_options"
+      ) {
         const optionIds =
           previousName === "search_options" || previousName === "filter_options"
             ? outputFromPrevious("optionIds")
@@ -4125,7 +4542,7 @@ function hostedWorkflow(
         bindings.maxPrice = bindingInput(
           names.includes("search_options") ? "max_price" : "maxPrice",
         );
-      } else if (primitiveName === "get_details") {
+      } else if (isNativeTargetPrimitive && primitiveName === "get_details") {
         const optionId =
           previousName === "get_details" || previousName === "select_option"
             ? outputFromPrevious("optionId")
@@ -4135,7 +4552,7 @@ function hostedWorkflow(
               : null;
         if (optionId) bindings.optionId = optionId;
         else bindings.optionId = bindingInput("optionId");
-      } else if (primitiveName === "select_option") {
+      } else if (isNativeTargetPrimitive && primitiveName === "select_option") {
         const optionId =
           previousName === "get_details" || previousName === "select_option"
             ? outputFromPrevious("optionId")
@@ -4146,19 +4563,18 @@ function hostedWorkflow(
         if (optionId) bindings.optionId = optionId;
         else bindings.optionId = bindingInput("optionId");
       }
-      const descriptor = descriptors.find(
-        (tool) => tool.name === primitiveName,
-      );
       for (const key of Object.keys(
         schemaProperties(descriptor?.inputSchema ?? {}),
       )) {
         if (
+          isNativeTargetPrimitive &&
           primitiveName === "filter_products" &&
           key === "category" &&
           names.includes("search_products")
         )
           continue;
         if (
+          isNativeTargetPrimitive &&
           primitiveName === "filter_options" &&
           key === "cabin" &&
           names.includes("search_options")

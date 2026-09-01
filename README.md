@@ -26,8 +26,11 @@ cloning, API key, account, terminal, or configuration is required.
 1. Enter `/targets/commerce.html` in **Target website or domain** and click
    **Analyze**.
 2. Look for the five green **Native** cards, including `view_cart`. Yellow
-   **Inferred** cards are potential-only suggestions. The example workflow
-   uses `search_products`, `filter_products`, `get_product`, and `add_to_cart`.
+   **Inferred** cards come from page evidence. Both classifications can be
+   composed into a custom tool; inferred tools run in Studio's safe snapshot
+   preview, while only controlled-target tools can be injected into a live
+   page without the optional extension. The example workflow uses
+   `search_products`, `filter_products`, `get_product`, and `add_to_cart`.
 3. Drag those cards into the workflow canvas, keep the name
    `buy_best_product`, and click **Save tool**.
 4. Click **Inject into page**, then **Test WebMCP**. If the browser does not

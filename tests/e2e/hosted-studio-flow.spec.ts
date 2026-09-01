@@ -32,6 +32,188 @@ interface WebMcpTestHostState {
   executeToolCalls: string[];
 }
 
+interface ExternalToolFixture {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  annotations: Record<string, unknown>;
+  source: "dom";
+  confidence: number;
+  evidence: Array<{
+    type: "dom";
+    selector: string;
+    note: string;
+  }>;
+}
+
+interface ToolListLayoutSnapshot {
+  overflowY: string;
+  panelOverflowY: string;
+  clientHeight: number;
+  scrollHeight: number;
+  listBottom: number;
+  panelBottom: number;
+  cardBottoms: number[];
+  schemaBottoms: number[];
+}
+
+const externalSnapshotHtml = `
+<!doctype html>
+<html>
+  <body>
+    <h1>Example Catalog</h1>
+    <form id="search-form">
+      <label>Search <input name="query" type="search" /></label>
+      <button type="submit">Search</button>
+    </form>
+    <ul id="results">
+      <li data-product="keyboard">Mechanical keyboard</li>
+      <li data-product="mouse">Wireless mouse</li>
+    </ul>
+    <button id="add-button" type="button">Add keyboard to cart</button>
+    <span id="cart-count">0</span>
+  </body>
+</html>`;
+
+function inferredExternalTool(
+  name: string,
+  description: string,
+  inputSchema: Record<string, unknown>,
+  selector: string,
+  options: { destructive?: boolean; note?: string } = {},
+): ExternalToolFixture {
+  return {
+    name,
+    description,
+    inputSchema,
+    annotations: options.destructive
+      ? { destructiveHint: true }
+      : { readOnlyHint: true },
+    source: "dom",
+    confidence: 0.76,
+    evidence: [
+      {
+        type: "dom",
+        selector,
+        note: options.note ?? `Observed evidence for ${name}.`,
+      },
+    ],
+  };
+}
+
+function inferredCommerceTools(): ExternalToolFixture[] {
+  return [
+    inferredExternalTool(
+      "search_products",
+      "Potentially search the visible product catalog.",
+      {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+        additionalProperties: false,
+      },
+      "#search-form",
+      { note: "Observed a product search form." },
+    ),
+    inferredExternalTool(
+      "add_to_cart",
+      "Potentially add the selected product to the cart.",
+      {
+        type: "object",
+        properties: {
+          productId: { type: "string" },
+          quantity: { type: "integer", minimum: 1, default: 1 },
+        },
+        required: ["productId", "quantity"],
+        additionalProperties: false,
+      },
+      "#add-button",
+      { destructive: true, note: "Observed an add-to-cart action." },
+    ),
+  ];
+}
+
+function externalInspectionPayload(
+  tools: readonly ExternalToolFixture[],
+  previewHtml = externalSnapshotHtml,
+): Record<string, unknown> {
+  return {
+    status: "inspected",
+    url: "https://example.com/catalog",
+    title: "Example Catalog",
+    tools,
+    frame: {
+      status: "blocked",
+      reason: "The site only allows framing by its own origin.",
+    },
+    note: "Fetched page evidence produced potential tools.",
+    previewHtml,
+  };
+}
+
+async function mockExternalInspection(
+  page: Page,
+  tools: readonly ExternalToolFixture[],
+  previewHtml = externalSnapshotHtml,
+): Promise<void> {
+  await page.route("**/api/analyze-external", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(externalInspectionPayload(tools, previewHtml)),
+    });
+  });
+}
+
+async function measureToolList(
+  page: Page,
+  selector: string,
+): Promise<ToolListLayoutSnapshot> {
+  return page.evaluate((listSelector) => {
+    const list = document.querySelector<HTMLElement>(listSelector);
+    if (!list) throw new Error(`Tool list ${listSelector} was not found.`);
+    const cards = Array.from(
+      list.querySelectorAll<HTMLElement>(".discovery-card"),
+    );
+    if (cards.length === 0)
+      throw new Error(`Tool list ${listSelector} is empty.`);
+    const listRect = list.getBoundingClientRect();
+    const panel = list.closest<HTMLElement>(".discovery-panel");
+    const cardBottoms = cards.map(
+      (card) => card.getBoundingClientRect().bottom,
+    );
+    const schemaBottoms = cards.map((card) => {
+      const schema = card.querySelector<HTMLElement>(".discovery-schema");
+      if (!schema)
+        throw new Error(`A card in ${listSelector} is missing its schema.`);
+      return schema.getBoundingClientRect().bottom;
+    });
+    return {
+      overflowY: getComputedStyle(list).overflowY,
+      panelOverflowY: panel ? getComputedStyle(panel).overflowY : "visible",
+      clientHeight: list.clientHeight,
+      scrollHeight: list.scrollHeight,
+      listBottom: listRect.bottom,
+      panelBottom: panel?.getBoundingClientRect().bottom ?? listRect.bottom,
+      cardBottoms,
+      schemaBottoms,
+    };
+  }, selector);
+}
+
+function expectToolListNotClipped(layout: ToolListLayoutSnapshot): void {
+  expect(layout.overflowY).not.toMatch(/auto|scroll/i);
+  expect(layout.panelOverflowY).not.toMatch(/hidden|auto|scroll/i);
+  expect(layout.clientHeight).toBeGreaterThanOrEqual(layout.scrollHeight);
+  for (const bottom of layout.cardBottoms)
+    expect(bottom).toBeLessThanOrEqual(layout.listBottom + 1);
+  for (const bottom of layout.schemaBottoms)
+    expect(bottom).toBeLessThanOrEqual(layout.listBottom + 1);
+  expect(Math.max(...layout.cardBottoms)).toBeLessThanOrEqual(
+    layout.panelBottom + 1,
+  );
+}
+
 declare global {
   interface Window {
     __webmcpTestHost?: WebMcpTestHostState;
@@ -617,7 +799,7 @@ test.describe("hosted WebMCP Studio builder", () => {
     }
   });
 
-  test("uses fetched evidence for external discovery and shows a display-only preview", async ({
+  test("uses fetched evidence for external discovery and shows the external preview boundary", async ({
     browser,
   }) => {
     const context = await browser.newContext({
@@ -741,6 +923,196 @@ test.describe("hosted WebMCP Studio builder", () => {
         /Added search_content to the workflow/i,
       );
       await expect(page.locator("#inject-button")).toBeDisabled();
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("saves a custom tool composed from inferred external tools", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+    });
+    await installSyntheticNativeHost(context);
+    const page = await context.newPage();
+    await mockExternalInspection(page, inferredCommerceTools());
+    try {
+      await page.goto(`${hostedBaseUrl}/`, { waitUntil: "domcontentloaded" });
+      await page.locator("#site-url").fill("https://example.com/catalog");
+      await page.locator("#discover-button").click();
+
+      const tools = inferredCommerceTools();
+      await expect(page.locator("#potential-list .discovery-card")).toHaveCount(
+        tools.length,
+      );
+      for (const tool of tools) {
+        await assertClassification(discoveryCard(page, tool.name), "inferred");
+        await dragPrimitive(page, tool.name);
+      }
+      await expect(page.locator("#compose-flow .flow-discovery")).toHaveCount(
+        tools.length,
+      );
+      await expect(
+        page.locator("#compose-flow .flow-discovery[data-provenance=inferred]"),
+      ).toHaveCount(tools.length);
+
+      await page.locator("#tool-name").fill("buy_inferred_product");
+      await expect(page.locator("#generate-button")).toBeEnabled();
+      await page.locator("#generate-button").click();
+
+      const generated = await generatedCard(page, "buy_inferred_product");
+      await expect(page.locator("#composer-message")).toContainText(
+        /Saved buy_inferred_product for this session/i,
+      );
+      await expect(generated).toContainText("2 steps");
+      await expect(page.locator("#generated-count")).toContainText("1 ready");
+      await waitForModelContextTool(page, "buy_inferred_product");
+      const listed = await invokeModelContextTool(
+        page,
+        "list_generated_tools",
+        {},
+      );
+      expect(listed).toMatchObject({
+        tools: [expect.objectContaining({ name: "buy_inferred_product" })],
+      });
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("runs an inferred tool preview and visibly updates the external snapshot", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+    });
+    await installSyntheticNativeHost(context);
+    const page = await context.newPage();
+    await mockExternalInspection(page, inferredCommerceTools());
+    try {
+      await page.goto(`${hostedBaseUrl}/`, { waitUntil: "domcontentloaded" });
+      await page.locator("#site-url").fill("https://example.com/catalog");
+      await page.locator("#discover-button").click();
+      await expect(page.locator("#target-preview-label")).toHaveText(
+        "interactive snapshot",
+      );
+
+      const snapshot = page.frameLocator("#target-frame");
+      await expect(snapshot.locator("#cart-count")).toHaveText("0");
+      await expect(
+        snapshot.locator("#webmcp-studio-preview-status"),
+      ).toHaveCount(0);
+
+      for (const tool of inferredCommerceTools())
+        await dragPrimitive(page, tool.name);
+      await page.locator("#tool-name").fill("buy_inferred_preview");
+      await page.locator("#generate-button").click();
+      const generated = await generatedCard(page, "buy_inferred_preview");
+
+      await waitForModelContextTool(page, "buy_inferred_preview");
+      const agentResult = await invokeModelContextTool(
+        page,
+        "buy_inferred_preview",
+        { query: "keyboard", productId: "keyboard", quantity: 1 },
+      );
+      expect(agentResult).toMatchObject({
+        success: true,
+        stateChanged: true,
+      });
+      await expect(
+        snapshot.locator("#webmcp-studio-preview-status"),
+      ).toContainText(/Inferred preview ran/i);
+
+      await clickPageAction(page, generated, /run preview/i);
+
+      await expect(page.locator("#composer-message")).toContainText(
+        /test passed/i,
+      );
+      await expect(
+        snapshot.locator("#webmcp-studio-preview-status"),
+      ).toContainText(/Inferred preview ran/i);
+      await expect(
+        snapshot.locator('[data-webmcp-studio-preview-tool="add_to_cart"]'),
+      ).toBeVisible();
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("keeps external page injection clearly unavailable for inferred tools", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+    });
+    await installSyntheticNativeHost(context);
+    const page = await context.newPage();
+    await mockExternalInspection(page, inferredCommerceTools());
+    try {
+      await page.goto(`${hostedBaseUrl}/`, { waitUntil: "domcontentloaded" });
+      await page.locator("#site-url").fill("https://example.com/catalog");
+      await page.locator("#discover-button").click();
+      for (const tool of inferredCommerceTools())
+        await dragPrimitive(page, tool.name);
+      await page.locator("#tool-name").fill("external_proposal");
+      await page.locator("#generate-button").click();
+      const generated = await generatedCard(page, "external_proposal");
+
+      await expect(page.locator("#inject-button")).toBeDisabled();
+      await expect(
+        generated.getByRole("button", { name: /Inject needs extension/i }),
+      ).toBeDisabled();
+      await expect(page.locator("#injection-help")).toContainText(
+        /external|potential|extension|preview/i,
+      );
+      await expect(page.locator("#target-frame")).toHaveAttribute(
+        "sandbox",
+        "allow-scripts",
+      );
+      await expect(page.locator("#target-preview-label")).toHaveText(
+        "interactive snapshot",
+      );
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("keeps long discovery and potential tool lists within their containers", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      viewport: { width: 1280, height: 720 },
+      storageState: { cookies: [], origins: [] },
+    });
+    const page = await context.newPage();
+    const longTools = Array.from({ length: 8 }, (_, index) =>
+      inferredExternalTool(
+        `catalog_action_${String(index + 1).padStart(2, "0")}`,
+        `Potential catalog action ${index + 1}.`,
+        {
+          type: "object",
+          properties: { query: { type: "string" } },
+          additionalProperties: false,
+        },
+        "#search-form",
+      ),
+    );
+    await mockExternalInspection(page, longTools);
+    try {
+      await page.goto(`${hostedBaseUrl}/`, { waitUntil: "domcontentloaded" });
+      await page.locator("#site-url").fill("https://example.com/catalog");
+      await page.locator("#discover-button").click();
+      await expect(page.locator("#potential-list .discovery-card")).toHaveCount(
+        longTools.length,
+      );
+      expectToolListNotClipped(await measureToolList(page, "#potential-list"));
+
+      await discoverSite(page, `${hostedBaseUrl}/targets/commerce.html`);
+      await expect(page.locator("#discovery-list .discovery-card")).toHaveCount(
+        5,
+      );
+      expectToolListNotClipped(await measureToolList(page, "#discovery-list"));
     } finally {
       await context.close();
     }

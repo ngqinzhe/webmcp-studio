@@ -18,10 +18,20 @@ const hostedTargets = resolve(hosted, "targets");
 const indexSource = resolve(hosted, "index.html");
 const stylesSource = resolve(hosted, "styles.css");
 const studioSource = resolve(hosted, "studio.ts");
+const externalPreviewRuntimeSource = resolve(
+  hosted,
+  "external-preview-runtime.js",
+);
 const hostingSource = resolve(root, ".openai/hosting.json");
 const externalDiscoverySource = resolve(root, "scripts/external-discovery.mjs");
 
-for (const path of [indexSource, stylesSource, demo, externalDiscoverySource]) {
+for (const path of [
+  indexSource,
+  stylesSource,
+  demo,
+  externalDiscoverySource,
+  externalPreviewRuntimeSource,
+]) {
   if (!existsSync(path)) throw new Error(`Missing hosted build input: ${path}`);
 }
 
@@ -92,6 +102,10 @@ if (existsSync(studioSource)) {
       });
     }
   }
+  cpSync(
+    externalPreviewRuntimeSource,
+    resolve(dist, "assets/external-preview-runtime.js"),
+  );
 } else {
   // A future hosted/studio.ts can use the existing module tag unchanged. For
   // now omit it from the emitted shell instead of shipping a broken request.
@@ -127,6 +141,7 @@ const hostedAssets = [
   ["index.html", "text/html; charset=utf-8"],
   ["styles.css", "text/css; charset=utf-8"],
   ["assets/studio.js", "text/javascript; charset=utf-8"],
+  ["assets/external-preview-runtime.js", "text/javascript; charset=utf-8"],
   ["assets/commerce.js", "text/javascript; charset=utf-8"],
   ["assets/travel.js", "text/javascript; charset=utf-8"],
   ["targets/commerce.html", "text/html; charset=utf-8"],
@@ -150,9 +165,12 @@ writeFileSync(
 const SECURITY_HEADERS = ${JSON.stringify(securityHeaders, null, 2)};
 const EMBEDDED_ASSETS = ${JSON.stringify(embeddedAssets)};
 
-function withSecurityHeaders(response) {
+function withSecurityHeaders(response, overrides = {}) {
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+    headers.set(name, value);
+  }
+  for (const [name, value] of Object.entries(overrides)) {
     headers.set(name, value);
   }
   return new Response(response.body, {
@@ -166,11 +184,16 @@ function embeddedAssetResponse(request) {
   const pathname = new URL(request.url).pathname;
   const asset = EMBEDDED_ASSETS[pathname === "/" ? "/index.html" : pathname];
   if (!asset) return null;
+  const headers =
+    pathname === "/assets/external-preview-runtime.js"
+      ? { "Cross-Origin-Resource-Policy": "cross-origin" }
+      : {};
   return withSecurityHeaders(
     new Response(request.method === "HEAD" ? null : asset.body, {
       status: 200,
       headers: { "Content-Type": asset.contentType },
     }),
+    headers,
   );
 }
 

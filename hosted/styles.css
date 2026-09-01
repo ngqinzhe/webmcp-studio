@@ -666,8 +666,6 @@ textarea:focus,
 .discovery-panel {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
-  overflow: hidden;
 }
 
 .discovery-legend {
@@ -774,9 +772,7 @@ textarea:focus,
 .discovery-list {
   display: grid;
   gap: 8px;
-  max-height: 500px;
   margin: 14px 21px 0;
-  overflow: auto;
   padding: 1px 4px 3px 1px;
   scrollbar-color: rgba(167, 245, 210, 0.25) transparent;
 }
@@ -1080,9 +1076,7 @@ textarea:focus,
 .potential-list {
   display: grid;
   gap: 7px;
-  max-height: 280px;
   margin-top: 11px;
-  overflow: auto;
 }
 
 .potential-list .discovery-card-head {
@@ -1821,10 +1815,6 @@ body.is-pointer-dragging {
 
   .builder-grid {
     grid-template-columns: 1fr;
-  }
-
-  .discovery-list {
-    max-height: 420px;
   }
 
   .outcome-grid {

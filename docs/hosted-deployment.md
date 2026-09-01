@@ -13,9 +13,9 @@ Before publishing a URL, confirm that a clean browser session can:
    configuration.
 2. Enter `/targets/commerce.html` (or the public controlled URL) in **Target
    website or domain** and click **Analyze**.
-3. See discovered cards labelled **Native** in green. If potential interface
-   suggestions are shown, they must be labelled **Inferred** in yellow and kept
-   out of the executable workflow.
+3. See discovered cards labelled **Native** in green. Potential interface
+   suggestions must be labelled **Inferred** in yellow; they can still be
+   dragged into a Studio workflow and run against its safe snapshot.
 4. Drag `search_products`, `filter_products`, `get_product`, and `add_to_cart`
    into the right-hand workflow canvas, name it `buy_best_product`, and click
    **Save tool**.
@@ -246,12 +246,15 @@ retried after the target or browser state is fixed.
 ## External URL discovery and the optional adapter
 
 An external URL entered in hosted Studio is a **Discovered/Potential Tool**
-source only. Its proposals are **Inferred**, shown in yellow, and never
-eligible for the live workflow canvas. The hosted page does not inject
-JavaScript, persist WebMCP registrations, read a third-party DOM, or turn that
-origin into an executable tool. Browser same-origin and CORS rules make that
-boundary explicit. The UI must keep inferred/potential metadata visually
-distinct from a **Native** **Live/Executable WebMCP Tool**.
+source. Its proposals are shown in the discovery library, classified as
+**Native** (green) when the fetched page declares a WebMCP-shaped tool and
+**Inferred** (yellow) when the tool is derived from interface evidence. Both
+can be dragged into the workflow canvas, saved as a generated Studio tool, and
+executed against the Studio-owned sanitized snapshot. The hosted page does not
+inject JavaScript, persist WebMCP registrations, or read a third-party DOM.
+Browser same-origin and CORS rules make the live-page boundary explicit: only a
+controlled same-origin target can receive a live generated registration without
+the optional extension.
 
 For advanced external-site instrumentation, build and load the optional
 extension from `dist/extension`, grant the browser's requested tab/site access,
@@ -288,9 +291,11 @@ HTTPS frames from the Studio, but `X-Frame-Options` and
 `Content-Security-Policy: frame-ancestors` on the target can still block the
 preview. In that case Studio shows a clear fallback link to open the page in a
 new tab. The parent page never reads the external DOM, sends the WebMCP bridge
-to it, injects JavaScript, or executes inferred tools. Use the optional
-extension adapter only when external-site instrumentation is explicitly
-appropriate.
+to it, or injects JavaScript. Inferred workflows instead run through a
+tokenized, Studio-owned sanitized snapshot so the generated WebMCP tool can be
+invoked and visibly demonstrated without contacting the third-party origin.
+Use the optional extension adapter only when external-site instrumentation is
+explicitly appropriate.
 
 ## Troubleshooting a deployed URL
 
@@ -307,10 +312,12 @@ appropriate.
   mutating call.
 - **Inject into page is unavailable:** confirm that the selected target is one
   of the same-origin controlled paths and that a generated workflow exists.
-  External URLs are intentionally potential-only; unsupported native hosts use
-  **Run preview**.
-- **External URL is potential-only:** this is expected for the hosted path;
-  use the optional extension adapter only when explicit site access is
+  External URLs use **Run preview** because the hosted page cannot inject into
+  a third-party origin.
+- **External preview:** drag either Native or Inferred cards into a workflow,
+  save it, then use **Run preview** or invoke the generated tool from Studio's
+  WebMCP context. The visible result is deliberately a Studio-owned snapshot;
+  use the optional extension adapter only when live external instrumentation is
   appropriate.
 
 For a quick header check, replace the placeholder with the deployed host:

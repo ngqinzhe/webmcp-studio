@@ -17,24 +17,24 @@ The existing `core` types and extension runtime stay intact. The hosted runtime 
 
 Studio registers these native tools when `document.modelContext` is available:
 
-- `discover_site_tools`: select a controlled target or inspect an external URL as potential-only; returns descriptors, evidence, confidence, and live/potential status.
+- `discover_site_tools`: select a controlled target or inspect an external URL as potential-on-origin; returns descriptors, evidence, confidence, and live/preview status. External descriptors can be composed and executed against Studio's sanitized snapshot.
 - `inspect_tool`: returns one discovered descriptor and its schema/evidence.
 - `compose_workflow`: creates a structured ordered workflow draft from selected primitive names; it never evaluates generated JavaScript.
 - `generate_tool`: validates the draft, persists it in session storage, and registers the generated tool on the Studio document.
 - `list_generated_tools`: returns session-generated tools and registration state.
 - `execute_workflow`: executes a generated workflow and returns a structured result plus trace.
 
-The generated demo workflow `buy_best_product` is a deterministic DAG-like ordered definition: search → filter → get details → add to cart. Bindings pass prior outputs to later primitive calls. The execution engine emits a trace for every node, stops on the first understandable failure, and never retries a mutating call after an uncertain result.
+The generated demo workflow `buy_best_product` is a deterministic DAG-like ordered definition: search → filter → get details → add to cart. Bindings pass prior outputs to later primitive calls. The execution engine returns a trace for agent-readable results, stops on the first understandable failure, and never retries a mutating call after an uncertain result.
 
 ## Discovery and UX
 
-The landing view leads with “WebMCP Studio — Turn websites into agent-native interfaces” and a visible Discover → Compose → Generate → Test → Execute strip. The strongest panel is the discovery inspector: every card shows name, description, typed schema, source primitive, DOM/UI evidence, confidence, and a clear Live WebMCP or Potential Tool status. A concise 60-second demo primes the commerce target and selects a useful primitive set without hiding the individual steps.
+The landing view leads with “WebMCP Studio — Turn websites into agent-native interfaces” and a single site/domain input. The strongest panel is the discovery library: every card shows name, description, typed schema, source primitive, DOM/UI evidence, confidence, and a clear green Native or yellow Inferred status. The right-hand workflow canvas turns selected cards into a named custom tool without requiring judges to understand WebMCP first.
 
 Unsupported browsers keep the editor and a clearly labeled preview path usable, but never install a fake `modelContext` or claim that preview execution is native. The UI explains the required supported browser capability and exposes the live registration status.
 
 ## Security and deployment
 
-Only same-origin controlled demo targets are executable in the hosted path. External URLs are analyzed as potential/discovered information and cannot become live tools without an optional extension adapter. Schemas and tool inputs are validated at the registration and execution boundaries; errors are returned as safe, agent-readable objects. The production response sets `Permissions-Policy: tools=(self)`, secure framing/CSP headers, and no localhost-only assumptions.
+Only same-origin controlled demo targets are executable against a live page in the hosted path. External URLs are analyzed as potential/discovered information and cannot become live page tools without an optional extension adapter, but their descriptors can be composed into generated Studio tools and executed against a sanitized local snapshot. Schemas and tool inputs are validated at the registration and execution boundaries; errors are returned as safe, agent-readable objects. The production response sets `Permissions-Policy: tools=(self)`, secure framing/CSP headers, and no localhost-only assumptions.
 
 The existing extension build remains part of the repository build. A hosted build copies the public Studio and controlled targets into `dist`, emits a Workers-compatible `dist/server/index.js`, and is independently served locally for fresh-session checks. Deployment metadata is kept in `.openai/hosting.json` and the hosted URL is the handoff artifact.
 

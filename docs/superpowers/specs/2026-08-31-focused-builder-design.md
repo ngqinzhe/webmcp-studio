@@ -23,17 +23,20 @@ The hosted path has two classes of discovery:
   `document.modelContext.registerTool`; controlled target descriptors use
   `source: "webmcp"`.
 - **Inferred**: Studio proposes a capability from DOM/interface evidence or
-  external URL hints; these descriptors use non-WebMCP provenance and are not
-  executable in the hosted page.
+  external URL evidence; these descriptors use non-WebMCP provenance. They can
+  be composed and executed against Studio's sanitized local snapshot, but they
+  are not live tools on the external origin.
 
 Native/inferred is provenance. It is displayed separately from runtime
 availability, which can be **Live WebMCP** or **Preview only** when the browser
 does not expose the native API. Studio must never call a preview handler a
 native WebMCP invocation.
 
-External URLs remain potential-only. Hosted Studio does not inject scripts,
-read a third-party DOM, or persist registrations on an external origin. The
-optional extension is the advanced adapter for that boundary.
+External URLs remain potential on their original origin. Hosted Studio does not
+inject scripts, read a third-party DOM, or persist registrations on an external
+origin. Their inferred descriptors can still be composed into generated Studio
+tools and executed against a sanitized local snapshot. The optional extension
+is the advanced adapter for live external instrumentation.
 
 ## Focused builder experience
 
@@ -46,8 +49,8 @@ The first workspace viewport contains:
 2. A two-column builder. The left column contains the live target identity and
    discovered capability library. The right column contains the workflow
    canvas and generated-tool form.
-3. A compact execution panel that follows the generated tool from injection
-   through primitive calls and visible target state change.
+3. A compact execution panel that follows the generated tool from publication
+   through a visible target state change.
 
 Discovery cards show name, agent-facing description, typed JSON Schema, source
 primitive/action, DOM or UI evidence, confidence, effect, and the green Native
@@ -66,7 +69,9 @@ The primary post-generation actions are:
 - **Inject into page**: publish the validated generated descriptor to the
   selected controlled target page.
 - **Test WebMCP**: invoke the page-registered generated handler with the
-  deterministic example input and show the primitive trace and target state.
+  deterministic example input and show the target state change.
+- **Run preview**: for inferred external tools or unsupported native hosts,
+  invoke the same structured workflow against the safe local snapshot.
 
 When native WebMCP is unavailable, the UI changes the action to an explicitly
 labeled **Run preview** path and preserves the unsupported-browser message.

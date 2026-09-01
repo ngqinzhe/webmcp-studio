@@ -250,17 +250,15 @@ async function serveRequest(request, response, distRoot, realDistRoot) {
     }
 
     const body = await readFile(publishedPath);
-    sendResponse(
-      request,
-      response,
-      200,
-      {
-        "Content-Type":
-          MIME_TYPES[extname(publishedPath).toLowerCase()] ??
-          "application/octet-stream",
-      },
-      body,
-    );
+    const headers = {
+      "Content-Type":
+        MIME_TYPES[extname(publishedPath).toLowerCase()] ??
+        "application/octet-stream",
+      ...(pathname === "/assets/external-preview-runtime.js"
+        ? { "Cross-Origin-Resource-Policy": "cross-origin" }
+        : {}),
+    };
+    sendResponse(request, response, 200, headers, body);
   } catch (error) {
     const code = errorCode(error);
     if (code === "ENOENT" || code === "ENOTDIR") {
