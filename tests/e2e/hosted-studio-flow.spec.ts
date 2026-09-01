@@ -1433,4 +1433,143 @@ test.describe("hosted WebMCP Studio builder", () => {
       await context.close();
     }
   });
+
+  test("repairs a legacy Northstar workflow restored from session storage", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+    });
+    const page = await context.newPage();
+    const legacyWorkflow = {
+      entryNodeId: "step-1",
+      nodes: [
+        {
+          id: "step-1",
+          type: "dom",
+          label: "search_products",
+          position: { x: 0, y: 0 },
+          config: {
+            capabilityId: "search_products",
+            args: { query: { kind: "input", path: "requirements" } },
+          },
+        },
+        {
+          id: "step-2",
+          type: "dom",
+          label: "filter_products",
+          position: { x: 220, y: 0 },
+          config: {
+            capabilityId: "filter_products",
+            args: { maxPrice: { kind: "input", path: "max_price" } },
+          },
+        },
+        {
+          id: "step-3",
+          type: "dom",
+          label: "get_product",
+          position: { x: 440, y: 0 },
+          config: {
+            capabilityId: "get_product",
+            args: {
+              productId: {
+                kind: "output",
+                nodeId: "step-2",
+                path: "products[0].id",
+              },
+            },
+          },
+        },
+        {
+          id: "step-4",
+          type: "dom",
+          label: "add_to_cart",
+          position: { x: 660, y: 0 },
+          config: {
+            capabilityId: "add_to_cart",
+            args: {
+              productId: {
+                kind: "output",
+                nodeId: "step-3",
+                path: "product.id",
+              },
+              quantity: { kind: "input", path: "quantity" },
+            },
+          },
+        },
+        {
+          id: "step-5",
+          type: "dom",
+          label: "view_cart",
+          position: { x: 880, y: 0 },
+          // This omitted args object is the shape produced before the fix.
+          config: { capabilityId: "view_cart" },
+        },
+        {
+          id: "return-result",
+          type: "return",
+          label: "Return result",
+          position: { x: 1100, y: 0 },
+          config: {
+            value: { kind: "output", nodeId: "step-5", path: "$" },
+          },
+        },
+      ],
+      edges: [
+        { from: "step-1", to: "step-2", when: "always" },
+        { from: "step-2", to: "step-3", when: "always" },
+        { from: "step-3", to: "step-4", when: "always" },
+        { from: "step-4", to: "step-5", when: "always" },
+        { from: "step-5", to: "return-result", when: "always" },
+      ],
+    };
+    await page.addInitScript((workflow) => {
+      sessionStorage.setItem(
+        "webmcp-studio.generated-tools.v2.commerce",
+        JSON.stringify([
+          {
+            name: "legacy_buy_best_product",
+            description: "A previously saved Northstar purchase workflow.",
+            primitiveNames: [
+              "search_products",
+              "filter_products",
+              "get_product",
+              "add_to_cart",
+              "view_cart",
+            ],
+            inputSchema: {
+              type: "object",
+              properties: {
+                requirements: { type: "string", minLength: 1 },
+                max_price: { type: "number", minimum: 0 },
+                quantity: { type: "integer", minimum: 1, default: 1 },
+              },
+              required: ["requirements", "max_price"],
+              additionalProperties: false,
+            },
+            workflow,
+          },
+        ]),
+      );
+    }, legacyWorkflow);
+    try {
+      await page.goto(`${hostedBaseUrl}/`, { waitUntil: "domcontentloaded" });
+      await expect(page.locator("#generated-list")).toContainText(
+        "legacy_buy_best_product",
+        { timeout: 20_000 },
+      );
+      await discoverSite(page, `${hostedBaseUrl}/targets/commerce.html`);
+      const generated = await generatedCard(page, "legacy_buy_best_product");
+      await clickPageAction(page, generated, /run preview/i);
+
+      await expect(page.locator("#composer-message")).toContainText(
+        /test passed/i,
+      );
+      await expect(generated).not.toContainText("needs attention");
+      const target = await targetFrameFor(page, "/targets/commerce.html");
+      await expect(target.locator("#cart-count")).toHaveText("1");
+    } finally {
+      await context.close();
+    }
+  });
 });

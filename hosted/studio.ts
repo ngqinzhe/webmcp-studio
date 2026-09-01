@@ -3106,7 +3106,10 @@ export class HostedStudio {
       const primitiveNames = this.readPrimitiveNames(requestedPrimitiveNames);
       const inputSchema = editableSchema(value.inputSchema);
       const workflowValue = value.workflow;
-      const workflow = workflowValue as Workflow;
+      const workflow =
+        isRecord(workflowValue) && Array.isArray(workflowValue.nodes)
+          ? normalizeHostedWorkflow(workflowValue as unknown as Workflow)
+          : (workflowValue as Workflow);
       if (
         !/^[a-z][a-z0-9_]*$/.test(name) ||
         !description ||
@@ -5028,6 +5031,22 @@ function hostedWorkflow(
     entryNodeId: stepNodes[0]?.id ?? returnId,
     nodes: [...stepNodes, returnNode],
     edges,
+  };
+}
+
+function normalizeHostedWorkflow(workflow: Workflow): Workflow {
+  return {
+    ...workflow,
+    nodes: workflow.nodes.map((node) => {
+      if (node.type !== "dom" || node.config.args !== undefined) return node;
+      // Workflows saved before zero-input primitives were made explicit omit
+      // args on nodes such as view_cart. Restore them with an empty argument
+      // object so legacy sessions do not forward the whole tool input.
+      return {
+        ...node,
+        config: { ...node.config, args: {} },
+      };
+    }),
   };
 }
 
