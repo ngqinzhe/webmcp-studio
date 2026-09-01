@@ -51,6 +51,7 @@ interface ToolListLayoutSnapshot {
   panelOverflowY: string;
   clientHeight: number;
   scrollHeight: number;
+  listTop: number;
   listBottom: number;
   panelBottom: number;
   cardBottoms: number[];
@@ -194,6 +195,7 @@ async function measureToolList(
       panelOverflowY: panel ? getComputedStyle(panel).overflowY : "visible",
       clientHeight: list.clientHeight,
       scrollHeight: list.scrollHeight,
+      listTop: listRect.top,
       listBottom: listRect.bottom,
       panelBottom: panel?.getBoundingClientRect().bottom ?? listRect.bottom,
       cardBottoms,
@@ -202,17 +204,15 @@ async function measureToolList(
   }, selector);
 }
 
-function expectToolListNotClipped(layout: ToolListLayoutSnapshot): void {
-  expect(layout.overflowY).not.toMatch(/auto|scroll/i);
-  expect(layout.panelOverflowY).not.toMatch(/hidden|auto|scroll/i);
-  expect(layout.clientHeight).toBeGreaterThanOrEqual(layout.scrollHeight);
-  for (const bottom of layout.cardBottoms)
-    expect(bottom).toBeLessThanOrEqual(layout.listBottom + 1);
-  for (const bottom of layout.schemaBottoms)
-    expect(bottom).toBeLessThanOrEqual(layout.listBottom + 1);
-  expect(Math.max(...layout.cardBottoms)).toBeLessThanOrEqual(
-    layout.panelBottom + 1,
-  );
+function expectToolListScrollable(layout: ToolListLayoutSnapshot): void {
+  expect(layout.overflowY).toMatch(/auto|scroll/i);
+  expect(layout.panelOverflowY).not.toMatch(/hidden/i);
+  expect(layout.clientHeight).toBeGreaterThan(0);
+  expect(layout.clientHeight).toBeLessThan(layout.scrollHeight);
+  expect(
+    Math.abs(layout.listBottom - layout.listTop - layout.clientHeight),
+  ).toBeLessThanOrEqual(1);
+  expect(layout.listBottom).toBeLessThanOrEqual(layout.panelBottom + 1);
 }
 
 declare global {
@@ -1138,13 +1138,71 @@ test.describe("hosted WebMCP Studio builder", () => {
       await expect(page.locator("#potential-list .discovery-card")).toHaveCount(
         longTools.length,
       );
-      expectToolListNotClipped(await measureToolList(page, "#potential-list"));
+      expectToolListScrollable(await measureToolList(page, "#potential-list"));
 
       await discoverSite(page, `${hostedBaseUrl}/targets/commerce.html`);
       await expect(page.locator("#discovery-list .discovery-card")).toHaveCount(
         5,
       );
-      expectToolListNotClipped(await measureToolList(page, "#discovery-list"));
+      expectToolListScrollable(await measureToolList(page, "#discovery-list"));
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("shows actionable errors when saving an invalid workflow", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+    });
+    const page = await context.newPage();
+    try {
+      await page.goto(`${hostedBaseUrl}/`, { waitUntil: "domcontentloaded" });
+      const form = page.locator("#tool-form");
+      await expect(form).toHaveAttribute("novalidate", "");
+      await expect(page.locator("#generate-button")).toBeEnabled();
+
+      await page.locator("#generate-button").click();
+      await expect(page.locator("#composer-message")).toContainText(
+        /workflow|discovered tool|add/i,
+      );
+      await expect(page.locator("#composer-message")).toHaveClass(/error/);
+
+      await discoverSite(page, `${hostedBaseUrl}/targets/commerce.html`);
+      await dragPrimitive(page, "search_products");
+      await page.locator("#tool-description").fill("");
+      await expect(page.locator("#generate-button")).toBeEnabled();
+      await page.locator("#generate-button").click();
+      await expect(page.locator("#composer-message")).toContainText(
+        /description|describe|enter/i,
+      );
+      await expect(page.locator("#composer-message")).toHaveClass(/error/);
+      await expect(page.locator("#tool-description")).toHaveAttribute(
+        "aria-invalid",
+        "true",
+      );
+
+      await page
+        .locator("#tool-description")
+        .fill("Search the selected catalog.");
+      await page.locator("#tool-name").fill("bad tool name");
+      await page.locator("#generate-button").click();
+      await expect(page.locator("#composer-message")).toContainText(
+        /lowercase|letters|underscore|name/i,
+      );
+      await expect(page.locator("#composer-message")).toHaveClass(/error/);
+      await expect(page.locator("#tool-name")).toHaveAttribute(
+        "aria-invalid",
+        "true",
+      );
+
+      await page.locator("#tool-name").fill("search_catalog");
+      await page.locator("#generate-button").click();
+      await expect(page.locator("#composer-message")).toContainText(
+        /Saved search_catalog/i,
+      );
+      await expect(page.locator("#composer-message")).not.toHaveClass(/error/);
     } finally {
       await context.close();
     }

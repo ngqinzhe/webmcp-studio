@@ -445,6 +445,10 @@ function toolNameError(value: string): string | null {
   return null;
 }
 
+function toolDescriptionError(value: string): string | null {
+  return value.trim() ? null : "A tool description is required.";
+}
+
 function isGeneratedTargetMessage(
   value: unknown,
 ): value is GeneratedTargetToParentMessage {
@@ -1027,10 +1031,12 @@ export class HostedStudio {
       event.preventDefault();
       void this.discoverFromSiteInput();
     });
-    optionalElement<HTMLFormElement>(
+    const toolForm = optionalElement<HTMLFormElement>(
       this.documentValue,
       "tool-form",
-    )?.addEventListener("submit", (event) => {
+    );
+    if (toolForm) toolForm.noValidate = true;
+    toolForm?.addEventListener("submit", (event) => {
       event.preventDefault();
       void this.generateFromForm();
     });
@@ -1228,10 +1234,15 @@ export class HostedStudio {
       this.updateComposerEligibility();
     });
     this.updateToolNameValidity();
-    optionalElement<HTMLTextAreaElement>(
+    const toolDescription = optionalElement<HTMLTextAreaElement>(
       this.documentValue,
       "tool-description",
-    )?.addEventListener("input", () => this.updateComposerEligibility());
+    );
+    toolDescription?.addEventListener("input", () => {
+      this.updateToolDescriptionValidity();
+      this.updateComposerEligibility();
+    });
+    this.updateToolDescriptionValidity();
   }
 
   private ensureSiteInput(): void {
@@ -1321,14 +1332,47 @@ export class HostedStudio {
     if (!input) return;
     const error = toolNameError(input.value);
     input.setCustomValidity(error ?? "");
-    if (error) input.setAttribute("aria-invalid", "true");
-    else input.removeAttribute("aria-invalid");
+    if (error) {
+      input.setAttribute("aria-invalid", "true");
+      input.setAttribute("aria-errormessage", "tool-name-help");
+    } else {
+      input.removeAttribute("aria-invalid");
+      input.removeAttribute("aria-errormessage");
+    }
     const help = optionalElement<HTMLElement>(
       this.documentValue,
       "tool-name-help",
     );
     if (help) {
       const message = error ?? "Lowercase letters, numbers, and underscores.";
+      if (help.textContent !== message) help.textContent = message;
+      help.classList.toggle("is-error", Boolean(error));
+      help.setAttribute("aria-live", "polite");
+    }
+  }
+
+  private updateToolDescriptionValidity(): void {
+    const input = optionalElement<HTMLTextAreaElement>(
+      this.documentValue,
+      "tool-description",
+    );
+    if (!input) return;
+    const error = toolDescriptionError(input.value);
+    input.setCustomValidity(error ?? "");
+    if (error) {
+      input.setAttribute("aria-invalid", "true");
+      input.setAttribute("aria-errormessage", "tool-description-help");
+    } else {
+      input.removeAttribute("aria-invalid");
+      input.removeAttribute("aria-errormessage");
+    }
+    const help = optionalElement<HTMLElement>(
+      this.documentValue,
+      "tool-description-help",
+    );
+    if (help) {
+      const message =
+        error ?? "Tell agents what this tool does and when to use it.";
       if (help.textContent !== message) help.textContent = message;
       help.classList.toggle("is-error", Boolean(error));
       help.setAttribute("aria-live", "polite");
@@ -3532,19 +3576,28 @@ export class HostedStudio {
   }
 
   private async generateFromForm(): Promise<void> {
-    const name = stringValue(
-      optionalElement<HTMLInputElement>(this.documentValue, "tool-name")?.value,
-      "buy_best_product",
-    )
-      .trim()
-      .toLowerCase();
-    const description = stringValue(
-      optionalElement<HTMLTextAreaElement>(
-        this.documentValue,
-        "tool-description",
-      )?.value,
-      "Use the selected page primitives to complete the requested task.",
-    ).trim();
+    const nameInput = optionalElement<HTMLInputElement>(
+      this.documentValue,
+      "tool-name",
+    );
+    const descriptionInput = optionalElement<HTMLTextAreaElement>(
+      this.documentValue,
+      "tool-description",
+    );
+    const name = stringValue(nameInput?.value).trim().toLowerCase();
+    const description = stringValue(descriptionInput?.value).trim();
+    this.updateToolNameValidity();
+    this.updateToolDescriptionValidity();
+    const nameError = toolNameError(name);
+    if (nameError) {
+      this.showSaveError(nameError, nameInput);
+      return;
+    }
+    const descriptionError = toolDescriptionError(description);
+    if (descriptionError) {
+      this.showSaveError(descriptionError, descriptionInput);
+      return;
+    }
     const schemaText = optionalElement<HTMLElement>(
       this.documentValue,
       "tool-schema",
@@ -3556,9 +3609,8 @@ export class HostedStudio {
       inputSchema: schemaText ?? "",
     });
     if (isRecord(result) && result.success === false) {
-      this.showComposerMessage(
+      this.showSaveError(
         stringValue(result.message, "The tool could not be generated."),
-        true,
       );
       return;
     }
@@ -4462,25 +4514,70 @@ export class HostedStudio {
       this.documentValue,
       "generate-button",
     );
-    const name = optionalElement<HTMLInputElement>(
-      this.documentValue,
-      "tool-name",
-    );
-    const description = optionalElement<HTMLTextAreaElement>(
-      this.documentValue,
-      "tool-description",
-    );
-    generate.disabled =
-      this.draftNames.length === 0 ||
-      Boolean(name && toolNameError(name.value)) ||
-      Boolean(description && !description.value.trim());
+    // Keep Save enabled so the submit handler can explain every validation
+    // failure, including an empty workflow or invalid form fields.
+    generate.disabled = false;
   }
 
   private showComposerMessage(message: string, error: boolean): void {
     const node = element<HTMLElement>(this.documentValue, "composer-message");
+    node.setAttribute("role", error ? "alert" : "status");
+    node.setAttribute("aria-live", error ? "assertive" : "polite");
+    node.setAttribute("aria-atomic", "true");
     node.textContent = message;
     node.classList.toggle("error", error);
     node.classList.toggle("success", !error);
+  }
+
+  private showSaveError(
+    message: string,
+    focusTarget: HTMLElement | null = null,
+  ): void {
+    this.showComposerMessage(this.actionableSaveError(message), true);
+    focusTarget?.focus();
+  }
+
+  private actionableSaveError(message: string): string {
+    const normalized = message.trim() || "The tool could not be saved.";
+    let fix = "Review the tool fields and workflow, then try Save tool again.";
+    if (
+      /generated tool a name|tool names must|lowercase|stable snake_case/i.test(
+        normalized,
+      )
+    ) {
+      fix =
+        "Enter a unique name using lowercase letters, numbers, and underscores, starting with a letter.";
+    } else if (/description/i.test(normalized)) {
+      fix = "Enter a short description that tells an agent what the tool does.";
+    } else if (
+      /select at least one|no executable primitive|empty workflow/i.test(
+        normalized,
+      )
+    ) {
+      fix = "Drag at least one discovered tool into the workflow canvas.";
+    } else if (
+      /unknown primitive|not available on this target/i.test(normalized)
+    ) {
+      fix =
+        "Remove the unavailable step, or analyze the target again and drag a current tool from the discovery library.";
+    } else if (
+      /workflow step can appear only once|duplicate/i.test(normalized)
+    ) {
+      fix = "Remove the duplicate step; each discovered tool may appear once.";
+    } else if (/already registered/i.test(normalized)) {
+      fix = "Choose a different custom tool name that is not already saved.";
+    } else if (/edited input schema|json schema/i.test(normalized)) {
+      fix =
+        "Restore the generated JSON Schema by rebuilding the workflow, then save again.";
+    } else if (
+      /workflow steps do not match|workflow definition|workflow contains|cycle|disconnected|completion path|references an output|does not bind|required input|unknown .* argument|does not declare|binding|edge/i.test(
+        normalized,
+      )
+    ) {
+      fix =
+        "Rebuild the workflow from the discovery library, keep steps ordered, and bind every required input.";
+    }
+    return `${normalized}${/[.!?]$/.test(normalized) ? "" : "."} Fix: ${fix}`;
   }
 
   private updateNativeStatus(): void {

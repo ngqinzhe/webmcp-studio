@@ -168,7 +168,7 @@
                       </div>
                     </div>
                   </div>
-                  <form id="tool-form" class="tool-form">
+                  <form id="tool-form" class="tool-form" novalidate>
                     <div class="form-section-heading">
                       <span>Name your tool</span>
                       <span class="typed-label">agent-facing</span>
@@ -192,8 +192,13 @@
                       name="description"
                       rows="2"
                       maxlength="240"
+                      required
+                      aria-describedby="tool-description-help"
                     >
 Find the best matching product and add it to the cart.</textarea>
+                    <p id="tool-description-help" class="field-help">
+                      Tell agents what this tool does and when to use it.
+                    </p>
                     <div class="schema-preview">
                       <div class="schema-title">
                         <span>Input shape</span>
@@ -218,8 +223,9 @@ Select tools to preview the input shape.</pre>
                     <p
                       id="composer-message"
                       class="inline-message"
-                      role="status"
-                      aria-live="polite"
+                      role="alert"
+                      aria-live="assertive"
+                      aria-atomic="true"
                     ></p>
                   </form>
                 </div>
