@@ -23,6 +23,7 @@ import type {
 import {
   executeNativeModelTool,
   isJsonSchema,
+  nativeModelContextHasTool,
   nativeModelContext,
   registerNativeModelTool,
   toNativeWebMcpTool,
@@ -66,10 +67,19 @@ interface PageToolRegistration {
   tool: NativeModelContextTool;
 }
 
+interface NativeRegistrationOwnership {
+  controller: AbortController;
+  /** True only after this Studio call was accepted by the host. */
+  registered: boolean;
+}
+
 interface PendingGeneratedRequest {
   resolve: (value: unknown) => void;
   reject: (reason: unknown) => void;
   timer: number;
+  toolName: string;
+  generation: number;
+  frameWindow: Window;
 }
 
 interface GeneratedBridgeError {
@@ -177,6 +187,9 @@ interface PendingInvocation {
   resolve: (value: JsonValue) => void;
   reject: (reason: unknown) => void;
   timer: number;
+  toolName: string;
+  generation: number;
+  frameWindow: Window;
 }
 
 type ExternalPreviewStatus =
@@ -713,6 +726,11 @@ export class HostedStudio {
   private readonly nativeRegistrations = new Set<string>();
   private readonly registrationControllers = new Map<string, AbortController>();
   private readonly nativeRegistrationFailures = new Map<string, string>();
+  /** Native primitive registrations mirrored from the selected controlled target. */
+  private readonly targetNativeRegistrations = new Map<
+    string,
+    NativeRegistrationOwnership
+  >();
   private readonly pending = new Map<string, PendingInvocation>();
   private readonly pendingGenerated = new Map<
     string,
@@ -739,6 +757,8 @@ export class HostedStudio {
   private targetReadyResolver: (() => void) | null = null;
   private targetReadyPromise: Promise<void> = Promise.resolve();
   private targetGeneration = 0;
+  private started = false;
+  private stopped = false;
   private externalPreview: ExternalPreviewState = {
     status: "idle",
     url: "",
@@ -763,6 +783,8 @@ export class HostedStudio {
   }
 
   start(): void {
+    if (this.started || this.stopped) return;
+    this.started = true;
     this.pageWindow.addEventListener("message", this.messageListener);
     this.targetFrame.addEventListener("load", () =>
       this.handleTargetFrameLoad(),
@@ -774,12 +796,20 @@ export class HostedStudio {
   }
 
   stop(): void {
+    if (this.stopped) return;
+    this.stopped = true;
+    this.started = false;
+    this.targetGeneration += 1;
     this.cancelPointerDrag();
     this.clearExternalPreviewTimer();
     this.nativeAbort.abort();
     for (const controller of this.registrationControllers.values())
       if (controller !== this.nativeAbort) controller.abort();
     this.pageWindow.removeEventListener("message", this.messageListener);
+    this.cancelPendingRequests(
+      "stale_request",
+      "Hosted Studio stopped before the target answered.",
+    );
     for (const pending of this.pending.values()) {
       this.pageWindow.clearTimeout(pending.timer);
       pending.reject(new Error("Hosted Studio stopped."));
@@ -790,7 +820,10 @@ export class HostedStudio {
       pending.reject(new Error("Hosted Studio stopped."));
     }
     this.pendingGenerated.clear();
+    this.unregisterTargetNativeTools();
     this.unregisterPageGeneratedTools();
+    this.unregisterGeneratedTools();
+    this.unregisterAllNativeTools();
     this.targetReadyResolver?.();
     this.targetReadyResolver = null;
   }
@@ -810,69 +843,78 @@ export class HostedStudio {
       event.preventDefault();
       void this.generateFromForm();
     });
-    const discoveryList = optionalElement<HTMLElement>(
-      this.documentValue,
-      "discovery-list",
-    );
-    discoveryList?.addEventListener("change", (event) => {
-      const input = event.target;
-      if (
-        !(input instanceof HTMLInputElement) ||
-        input.dataset.name === undefined
-      )
-        return;
-      const name = input.dataset.name;
-      if (input.checked && !this.draftNames.includes(name)) {
-        this.addPrimitiveToDraft(name);
-        return;
-      }
-      if (!input.checked && this.draftNames.includes(name)) {
-        this.commitDraftNames(
-          this.draftNames.filter((candidate) => candidate !== name),
-          `Removed ${name} from the workflow.`,
-        );
-        return;
-      }
-      this.updateComposerEligibility();
-    });
-    discoveryList?.addEventListener("click", (event) => {
-      const button = event.target;
-      if (!(button instanceof HTMLButtonElement)) return;
-      const action = button.dataset.action;
-      const name = button.dataset.name;
-      if (action === "add-to-workflow" && name) {
-        this.addPrimitiveToDraft(name);
-        return;
-      }
-      if (action === "select-primitive" && name) {
-        this.addPrimitiveToDraft(name);
-      }
-    });
-    discoveryList?.addEventListener("dragstart", (event) => {
-      const target = event.target;
-      const handle =
-        target instanceof Element
-          ? target.closest<HTMLElement>("[data-drag-handle]")
-          : null;
-      const card = handle?.closest<HTMLElement>(".discovery-card.is-native");
-      const name = card?.dataset.name;
-      if (
-        !handle ||
-        !card ||
-        !handle.draggable ||
-        !name ||
-        !this.nativeTargetTools().some((tool) => tool.name === name)
-      ) {
-        event.preventDefault();
-        return;
-      }
-      this.cancelPointerDrag();
-      this.writeDragPayload(event, { kind: "primitive", name });
-    });
-    discoveryList?.addEventListener("dragend", () => this.clearDragSession());
-    discoveryList?.addEventListener("pointerdown", (event) =>
-      this.handlePointerDown(event),
-    );
+    const discoveryLists = [
+      optionalElement<HTMLElement>(this.documentValue, "discovery-list"),
+      optionalElement<HTMLElement>(this.documentValue, "potential-list"),
+    ].filter((list): list is HTMLElement => list !== null);
+    for (const discoveryList of discoveryLists) {
+      discoveryList.addEventListener("change", (event) => {
+        const input = event.target;
+        if (
+          !(input instanceof HTMLInputElement) ||
+          input.dataset.name === undefined
+        )
+          return;
+        const name = input.dataset.name;
+        if (input.checked && !this.draftNames.includes(name)) {
+          this.addPrimitiveToDraft(name);
+          return;
+        }
+        if (!input.checked && this.draftNames.includes(name)) {
+          this.commitDraftNames(
+            this.draftNames.filter((candidate) => candidate !== name),
+            `Removed ${name} from the workflow.`,
+          );
+          return;
+        }
+        this.updateComposerEligibility();
+      });
+      discoveryList.addEventListener("click", (event) => {
+        const button = event.target;
+        if (!(button instanceof HTMLButtonElement)) return;
+        const action = button.dataset.action;
+        const name = button.dataset.name;
+        if (action === "add-to-workflow" && name) {
+          this.addPrimitiveToDraft(name);
+          return;
+        }
+        if (action === "select-primitive" && name) {
+          this.addPrimitiveToDraft(name);
+        }
+      });
+      discoveryList.addEventListener("dragstart", (event) => {
+        const target = event.target;
+        const source =
+          target instanceof Element
+            ? target.closest<HTMLElement>(
+                ".discovery-card[data-name][data-draggable='true']",
+              )
+            : null;
+        const name = source?.dataset.name;
+        const tool = name
+          ? this.workflowToolDescriptors().find(
+              (candidate) => candidate.name === name,
+            )
+          : undefined;
+        if (
+          !source ||
+          !name ||
+          !tool ||
+          (target instanceof Element &&
+            target.closest("button, input, textarea, select, a") &&
+            !target.closest("[data-drag-handle]"))
+        ) {
+          event.preventDefault();
+          return;
+        }
+        this.cancelPointerDrag();
+        this.writeDragPayload(event, { kind: "primitive", name });
+      });
+      discoveryList.addEventListener("dragend", () => this.clearDragSession());
+      discoveryList.addEventListener("pointerdown", (event) =>
+        this.handlePointerDown(event),
+      );
+    }
     this.documentValue.addEventListener("pointermove", (event) =>
       this.handlePointerMove(event),
     );
@@ -1221,8 +1263,13 @@ export class HostedStudio {
     this.targetReadyResolver?.();
     this.targetReadyResolver = null;
     this.clearExternalPreviewTimer();
+    this.cancelPendingRequests(
+      "stale_request",
+      "The target changed before the previous tool request completed.",
+    );
     const generation = ++this.targetGeneration;
     this.unregisterGeneratedTools();
+    this.unregisterTargetNativeTools();
     this.unregisterPageGeneratedTools();
     this.analysisRequested = true;
     this.targetScope = "external";
@@ -1384,6 +1431,25 @@ export class HostedStudio {
       : [];
   }
 
+  private targetGenerationActive(generation: number): boolean {
+    return (
+      !this.stopped &&
+      generation === this.targetGeneration &&
+      this.targetScope === "controlled"
+    );
+  }
+
+  /**
+   * Descriptors that may be assembled on the canvas. External descriptors are
+   * proposals only; the execution and publication paths still use
+   * nativeTargetTools()/targetScope guards below.
+   */
+  private workflowToolDescriptors(): TargetToolDescriptor[] {
+    return this.targetScope === "external"
+      ? this.potentialTools
+      : this.targetTools;
+  }
+
   private workflowDropzone(): HTMLElement | null {
     const flow = optionalElement<HTMLElement>(
       this.documentValue,
@@ -1436,12 +1502,17 @@ export class HostedStudio {
     if (!(target instanceof Element)) return;
     if (target.closest("button, input, textarea, select, a")) return;
     const handle = target.closest<HTMLElement>("[data-drag-handle]");
-    const card = handle?.closest<HTMLElement>(".discovery-card.is-native");
+    const card = target.closest<HTMLElement>(
+      ".discovery-card[data-name][data-draggable='true']",
+    );
     const row = handle?.closest<HTMLElement>(".flow-discovery");
     const cardName = card?.dataset.name;
     const rowName = row?.dataset.name;
     const rowIndex = row?.dataset.flowIndex;
     const sourceElement = card ?? row;
+    const cardTool = cardName
+      ? this.workflowToolDescriptors().find((tool) => tool.name === cardName)
+      : undefined;
     const payload = cardName
       ? { kind: "primitive" as const, name: cardName }
       : rowName && rowIndex !== undefined
@@ -1456,7 +1527,9 @@ export class HostedStudio {
       !sourceElement ||
       !payload ||
       (payload.kind === "primitive" &&
-        !this.nativeTargetTools().some((tool) => tool.name === payload.name)) ||
+        (!cardTool ||
+          (target.closest("button, input, textarea, select, a") !== null &&
+            target.closest("[data-drag-handle]") === null))) ||
       (payload.kind === "workflow" &&
         (!Number.isInteger(payload.index) ||
           this.draftNames[payload.index] !== payload.name))
@@ -1564,9 +1637,12 @@ export class HostedStudio {
     payload: StudioDragPayload,
     location: { target: EventTarget | null; clientY: number },
   ): void {
-    if (!this.nativeTargetTools().some((tool) => tool.name === payload.name)) {
+    if (
+      payload.kind === "primitive" &&
+      !this.workflowToolDescriptors().some((tool) => tool.name === payload.name)
+    ) {
       this.showComposerMessage(
-        `${payload.name} is inferred and cannot be composed into a live workflow.`,
+        `${payload.name} is no longer available in the discovery library.`,
         true,
       );
       return;
@@ -1616,9 +1692,9 @@ export class HostedStudio {
   }
 
   private addPrimitiveToDraft(name: string): void {
-    if (!this.nativeTargetTools().some((tool) => tool.name === name)) {
+    if (!this.workflowToolDescriptors().some((tool) => tool.name === name)) {
       this.showComposerMessage(
-        `${name} is inferred and cannot be composed into a live workflow.`,
+        `${name} is no longer available in the discovery library.`,
         true,
       );
       return;
@@ -1651,7 +1727,7 @@ export class HostedStudio {
     }
     if (unknown.length > 0) {
       this.showComposerMessage(
-        `Choose live Native primitives only. Unknown or inferred step${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")}.`,
+        `Choose tools from the discovery library. Unknown step${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")}.`,
         true,
       );
       return false;
@@ -1659,6 +1735,7 @@ export class HostedStudio {
     this.draftNames = [...names];
     this.selectedNames = new Set(this.draftNames);
     this.renderDiscoveries();
+    this.renderPotentialTools();
     this.renderComposer();
     this.updateComposerEligibility();
     if (message) this.showComposerMessage(message, false);
@@ -1681,8 +1758,16 @@ export class HostedStudio {
 
   private waitForGeneratedResponse(
     requestId: string,
+    toolName: string,
+    generation = this.targetGeneration,
+    frameWindow = this.targetFrame.contentWindow,
     timeoutMs = 15_000,
   ): Promise<unknown> {
+    if (!frameWindow)
+      return Promise.reject({
+        code: "execution_failed",
+        message: "The controlled target is not available.",
+      });
     return new Promise<unknown>((resolve, reject) => {
       const timer = this.pageWindow.setTimeout(() => {
         this.pendingGenerated.delete(requestId);
@@ -1691,8 +1776,29 @@ export class HostedStudio {
           message: "The target page did not answer the generated-tool request.",
         });
       }, timeoutMs);
-      this.pendingGenerated.set(requestId, { resolve, reject, timer });
+      this.pendingGenerated.set(requestId, {
+        resolve,
+        reject,
+        timer,
+        toolName,
+        generation,
+        frameWindow,
+      });
     });
+  }
+
+  private cancelPendingRequests(code: string, message: string): void {
+    const error = { code, message };
+    for (const [requestId, pending] of this.pending) {
+      this.pending.delete(requestId);
+      this.pageWindow.clearTimeout(pending.timer);
+      pending.reject(error);
+    }
+    for (const [requestId, pending] of this.pendingGenerated) {
+      this.pendingGenerated.delete(requestId);
+      this.pageWindow.clearTimeout(pending.timer);
+      pending.reject(error);
+    }
   }
 
   private generatedDescriptor(tool: GeneratedTool): TargetToolDescriptor {
@@ -1829,10 +1935,17 @@ export class HostedStudio {
       toolName: generated.name,
       descriptor,
     };
+    const generation = this.targetGeneration;
+    const frameWindow = this.targetFrame.contentWindow;
     const posted = this.postGeneratedMessage(message);
     if (posted) {
       try {
-        const response = await this.waitForGeneratedResponse(requestId);
+        const response = await this.waitForGeneratedResponse(
+          requestId,
+          generated.name,
+          generation,
+          frameWindow,
+        );
         if (
           isGeneratedTargetMessage(response) &&
           response.type === "generated-tool-ready"
@@ -1939,9 +2052,16 @@ export class HostedStudio {
       toolName: name,
       args: input,
     };
+    const generation = this.targetGeneration;
+    const frameWindow = this.targetFrame.contentWindow;
     if (!this.postGeneratedMessage(message))
       throw new Error("The target page test bridge is unavailable.");
-    const response = await this.waitForGeneratedResponse(requestId);
+    const response = await this.waitForGeneratedResponse(
+      requestId,
+      name,
+      generation,
+      frameWindow,
+    );
     if (!isGeneratedTargetMessage(response))
       throw new Error(
         "The target page returned an invalid generated-tool response.",
@@ -2163,7 +2283,7 @@ export class HostedStudio {
       {
         name: "compose_workflow",
         description:
-          "Compose an ordered structured workflow from unique Native WebMCP primitive names on the selected controlled target.",
+          "Compose an ordered structured workflow from unique discovered WebMCP tool names. External inferred tools create a potential proposal and remain non-executable in hosted Studio.",
         inputSchema: {
           type: "object",
           properties: {
@@ -2255,8 +2375,16 @@ export class HostedStudio {
     tool: StudioToolRegistration,
     controller: AbortController = this.nativeAbort,
   ): Promise<boolean> {
-    if (!this.nativeContext) return false;
+    if (!this.nativeContext || this.stopped || controller.signal.aborted)
+      return false;
     if (this.nativeRegistrations.has(tool.name)) return true;
+    if (await nativeModelContextHasTool(this.nativeContext, tool.name)) {
+      this.nativeRegistrationFailures.set(
+        tool.name,
+        `The native WebMCP host already exposes ${tool.name}; Studio left it untouched.`,
+      );
+      return false;
+    }
     try {
       const registration = await registerNativeModelTool(
         this.nativeContext,
@@ -2272,7 +2400,10 @@ export class HostedStudio {
         );
         return false;
       }
-      if (controller.signal.aborted) return false;
+      if (controller.signal.aborted || this.stopped) {
+        this.requestNativeUnregister(tool.name);
+        return false;
+      }
       this.nativeRegistrations.add(tool.name);
       this.registrationControllers.set(tool.name, controller);
       this.nativeRegistrationFailures.delete(tool.name);
@@ -2284,6 +2415,113 @@ export class HostedStudio {
       );
       return false;
     }
+  }
+
+  private requestNativeUnregister(name: string): void {
+    if (!this.nativeContext?.unregisterTool) return;
+    try {
+      void Promise.resolve(this.nativeContext.unregisterTool(name)).catch(
+        () => undefined,
+      );
+    } catch {
+      // AbortSignal cleanup remains the fallback for hosts without reliable
+      // explicit removal.
+    }
+  }
+
+  private unregisterOwnedNativeTool(
+    name: string,
+    controller?: AbortController,
+  ): void {
+    const registeredController = this.registrationControllers.get(name);
+    if (
+      !this.nativeRegistrations.has(name) ||
+      !registeredController ||
+      (controller !== undefined && registeredController !== controller)
+    )
+      return;
+    registeredController.abort();
+    this.registrationControllers.delete(name);
+    this.nativeRegistrations.delete(name);
+    this.nativeRegistrationFailures.delete(name);
+    this.requestNativeUnregister(name);
+  }
+
+  private unregisterAllNativeTools(): void {
+    for (const [name, controller] of this.registrationControllers)
+      this.unregisterOwnedNativeTool(name, controller);
+    this.registrationControllers.clear();
+    this.nativeRegistrations.clear();
+  }
+
+  /**
+   * Mirror the selected controlled page's native primitives onto Studio's
+   * own modelContext. This gives an agent looking at the Studio document a
+   * direct, typed entry point while keeping execution inside the same-origin
+   * target bridge.
+   */
+  private async registerTargetNativeTools(generation: number): Promise<void> {
+    if (!this.nativeContext || !this.targetGenerationActive(generation)) return;
+
+    for (const descriptor of this.nativeTargetTools()) {
+      if (!this.targetGenerationActive(generation)) return;
+      if (
+        STUDIO_TOOL_NAMES.includes(
+          descriptor.name as (typeof STUDIO_TOOL_NAMES)[number],
+        ) ||
+        this.nativeRegistrations.has(descriptor.name) ||
+        this.generated.has(descriptor.name)
+      )
+        continue;
+
+      const controller = new AbortController();
+      const ownership: NativeRegistrationOwnership = {
+        controller,
+        registered: false,
+      };
+      this.targetNativeRegistrations.set(descriptor.name, ownership);
+      const registered = await this.registerNativeTool(
+        {
+          name: descriptor.name,
+          description: descriptor.description,
+          inputSchema: cloneJsonSchema(descriptor.inputSchema),
+          annotations: { ...descriptor.annotations },
+          execute: (input) => this.invokeTarget(descriptor.name, input),
+        },
+        controller,
+      );
+
+      ownership.registered = registered;
+      if (this.targetNativeRegistrations.get(descriptor.name) !== ownership)
+        continue;
+      if (
+        !registered ||
+        controller.signal.aborted ||
+        !this.targetGenerationActive(generation)
+      ) {
+        this.unregisterTargetNativeRegistration(descriptor.name, ownership);
+      }
+    }
+    if (this.targetGenerationActive(generation)) this.updateNativeStatus();
+  }
+
+  private unregisterTargetNativeRegistration(
+    name: string,
+    ownership: NativeRegistrationOwnership,
+  ): void {
+    if (this.targetNativeRegistrations.get(name) !== ownership) return;
+    this.targetNativeRegistrations.delete(name);
+    ownership.controller.abort();
+    if (ownership.registered)
+      this.unregisterOwnedNativeTool(name, ownership.controller);
+    else if (this.registrationControllers.get(name) === ownership.controller)
+      this.registrationControllers.delete(name);
+  }
+
+  private unregisterTargetNativeTools(): void {
+    for (const [name, ownership] of this.targetNativeRegistrations)
+      this.unregisterTargetNativeRegistration(name, ownership);
+    this.targetNativeRegistrations.clear();
   }
 
   private storageKey(targetId = this.targetId): string {
@@ -2316,9 +2554,16 @@ export class HostedStudio {
     }
   }
 
-  private async restoreGeneratedTools(): Promise<void> {
+  private async restoreGeneratedTools(
+    generation: number = this.targetGeneration,
+  ): Promise<void> {
     const storage = this.sessionStorage();
-    if (!storage || this.targetTools.length === 0) return;
+    if (
+      !storage ||
+      this.targetTools.length === 0 ||
+      !this.targetGenerationActive(generation)
+    )
+      return;
     let parsed: unknown;
     try {
       parsed = JSON.parse(storage.getItem(this.storageKey()) ?? "null");
@@ -2327,6 +2572,7 @@ export class HostedStudio {
     }
     if (!Array.isArray(parsed)) return;
     for (const value of parsed) {
+      if (!this.targetGenerationActive(generation)) return;
       if (!isRecord(value)) continue;
       const name = stringValue(value.name).trim().toLowerCase();
       const description = stringValue(value.description).trim();
@@ -2372,6 +2618,10 @@ export class HostedStudio {
         },
         controller,
       );
+      if (!this.targetGenerationActive(generation)) {
+        if (native) this.unregisterOwnedNativeTool(name, controller);
+        return;
+      }
       this.generated.set(name, {
         name,
         description,
@@ -2399,19 +2649,7 @@ export class HostedStudio {
 
   private unregisterGeneratedTools(): void {
     for (const name of this.generated.keys()) {
-      this.registrationControllers.get(name)?.abort();
-      this.registrationControllers.delete(name);
-      this.nativeRegistrations.delete(name);
-      this.nativeRegistrationFailures.delete(name);
-      if (this.nativeContext?.unregisterTool) {
-        try {
-          void Promise.resolve(this.nativeContext.unregisterTool(name)).catch(
-            () => undefined,
-          );
-        } catch {
-          // Older hosts may expose registration without explicit removal.
-        }
-      }
+      this.unregisterOwnedNativeTool(name);
     }
   }
 
@@ -2424,7 +2662,12 @@ export class HostedStudio {
     this.targetReadyResolver?.();
     this.targetReadyResolver = null;
     this.clearExternalPreviewTimer();
+    this.cancelPendingRequests(
+      "stale_request",
+      "The target changed before the previous tool request completed.",
+    );
     this.unregisterGeneratedTools();
+    this.unregisterTargetNativeTools();
     this.unregisterPageGeneratedTools();
     this.targetId = id;
     this.targetScope = "controlled";
@@ -2485,7 +2728,8 @@ export class HostedStudio {
     const message = event.data;
     if (message.type === "target-ready") {
       if (message.target.id !== this.targetId) return;
-      if (this.targetScope !== "controlled") return;
+      const generation = this.targetGeneration;
+      if (!this.targetGenerationActive(generation)) return;
       this.targetScope = "controlled";
       this.targetIdentity = message.target;
       this.targetMode = message.mode;
@@ -2495,7 +2739,10 @@ export class HostedStudio {
         annotations: { ...tool.annotations },
       }));
       this.updateProjectDiscoveries();
-      await this.restoreGeneratedTools();
+      await this.registerTargetNativeTools(generation);
+      if (!this.targetGenerationActive(generation)) return;
+      await this.restoreGeneratedTools(generation);
+      if (!this.targetGenerationActive(generation)) return;
       this.targetReadyResolver?.();
       this.targetReadyResolver = null;
       this.hideTargetLoading(false);
@@ -2510,6 +2757,12 @@ export class HostedStudio {
     }
     const pending = this.pending.get(message.requestId);
     if (!pending) return;
+    if (
+      pending.generation !== this.targetGeneration ||
+      pending.frameWindow !== this.targetFrame.contentWindow ||
+      pending.toolName !== message.toolName
+    )
+      return;
     this.pending.delete(message.requestId);
     this.pageWindow.clearTimeout(pending.timer);
     if (message.type === "tool-result") pending.resolve(message.result);
@@ -2568,6 +2821,12 @@ export class HostedStudio {
     }
     const pending = this.pendingGenerated.get(message.requestId);
     if (!pending) return;
+    if (
+      pending.generation !== this.targetGeneration ||
+      pending.frameWindow !== this.targetFrame.contentWindow ||
+      pending.toolName !== message.toolName
+    )
+      return;
     this.pendingGenerated.delete(message.requestId);
     this.pageWindow.clearTimeout(pending.timer);
     if (message.type === "generated-tool-test-error") {
@@ -2611,6 +2870,18 @@ export class HostedStudio {
   }
 
   private invokeTarget(name: string, args: unknown): Promise<JsonValue> {
+    const generation = this.targetGeneration;
+    const frameWindow = this.targetFrame.contentWindow;
+    if (this.stopped || this.targetScope !== "controlled")
+      return Promise.reject({
+        code: "runtime_stopped",
+        message: "The controlled target is no longer active.",
+      });
+    if (!frameWindow)
+      return Promise.reject({
+        code: "execution_failed",
+        message: "The controlled target is not available.",
+      });
     const serialized = asJsonValue(parseArguments(args));
     const requestId = randomId("target-call");
     const message: ParentToTargetMessage = {
@@ -2630,14 +2901,25 @@ export class HostedStudio {
           message: `Target tool ${name} timed out.`,
         });
       }, 15_000);
-      this.pending.set(requestId, { resolve, reject, timer });
-      const frameWindow = this.targetFrame.contentWindow;
-      if (!frameWindow) {
+      this.pending.set(requestId, {
+        resolve,
+        reject,
+        timer,
+        toolName: name,
+        generation,
+        frameWindow,
+      });
+      if (
+        this.stopped ||
+        this.targetScope !== "controlled" ||
+        generation !== this.targetGeneration ||
+        frameWindow !== this.targetFrame.contentWindow
+      ) {
         this.pageWindow.clearTimeout(timer);
         this.pending.delete(requestId);
         reject({
-          code: "execution_failed",
-          message: "The controlled target is not available.",
+          code: "stale_request",
+          message: "The target changed before the tool request was sent.",
         });
         return;
       }
@@ -2659,7 +2941,7 @@ export class HostedStudio {
   private readPrimitiveNames(value: unknown): string[] {
     if (!Array.isArray(value)) return [];
     const available = new Set(
-      this.nativeTargetTools().map((tool) => tool.name),
+      this.workflowToolDescriptors().map((tool) => tool.name),
     );
     return Array.from(
       new Set(
@@ -2674,7 +2956,7 @@ export class HostedStudio {
   private unknownPrimitiveNames(value: unknown): string[] {
     if (!Array.isArray(value)) return ["<invalid primitiveNames>"];
     const available = new Set(
-      this.nativeTargetTools().map((tool) => tool.name),
+      this.workflowToolDescriptors().map((tool) => tool.name),
     );
     return Array.from(
       new Set(
@@ -2714,7 +2996,7 @@ export class HostedStudio {
       workflow.nodes.map((node, index) => [node.id, index]),
     );
     for (const [index, node] of primitiveNodes.entries()) {
-      const descriptor = this.targetTools.find(
+      const descriptor = this.workflowToolDescriptors().find(
         (tool) => tool.name === node.config.capabilityId,
       );
       const args = node.config.args ?? {};
@@ -2785,12 +3067,9 @@ export class HostedStudio {
           ? `A workflow step can appear only once: ${duplicates.join(", ")}.`
           : null;
     if (!validationMessage) this.commitDraftNames(valid);
-    const workflow = hostedWorkflow(valid, this.targetTools);
-    const inputSchema = workflowInputSchema(
-      this.targetId,
-      valid,
-      this.targetTools,
-    );
+    const descriptors = this.workflowToolDescriptors();
+    const workflow = hostedWorkflow(valid, descriptors);
+    const inputSchema = workflowInputSchema(this.targetId, valid, descriptors);
     const definitionMessage =
       validationMessage ??
       this.validateGeneratedDefinition(
@@ -3116,8 +3395,20 @@ export class HostedStudio {
       card.dataset.name = tool.name;
       card.dataset.classification = isNative ? "native" : "inferred";
       card.dataset.provenance = isNative ? "native" : "inferred";
+      card.dataset.source = tool.source ?? "unknown";
+      card.dataset.draggable = "true";
+      card.draggable = true;
       const head = this.documentValue.createElement("div");
       head.className = "discovery-card-head";
+      const handle = this.documentValue.createElement("span");
+      handle.className = "tool-drag-handle";
+      handle.dataset.dragHandle = "true";
+      handle.draggable = true;
+      handle.setAttribute("aria-hidden", "true");
+      handle.title = isNative
+        ? "Drag this declared tool to the workflow"
+        : "Drag this inferred tool to the workflow as a proposal";
+      handle.textContent = "⠿";
       const title = this.documentValue.createElement("div");
       title.className = "discovery-card-title";
       const strong = this.documentValue.createElement("strong");
@@ -3137,7 +3428,7 @@ export class HostedStudio {
       classification.dataset.classification = isNative ? "native" : "inferred";
       classification.dataset.tone = isNative ? "green" : "yellow";
       classification.textContent = isNative ? "Native" : "Inferred";
-      head.append(title, classification, source);
+      head.append(handle, title, classification, source);
       const details = this.documentValue.createElement("div");
       details.className = "discovery-card-details";
       const status = this.documentValue.createElement("span");
@@ -3152,7 +3443,17 @@ export class HostedStudio {
       const schemaPreview = this.documentValue.createElement("pre");
       schemaPreview.className = "discovery-schema";
       schemaPreview.textContent = text(asJsonValue(tool.inputSchema));
-      details.append(status, confidence, evidence, schemaPreview);
+      const add = this.documentValue.createElement("button");
+      add.type = "button";
+      add.className = "button button-quiet add-primitive";
+      add.dataset.action = "add-to-workflow";
+      add.dataset.name = tool.name;
+      add.disabled = this.draftNames.includes(tool.name);
+      add.setAttribute("aria-label", `Add ${tool.name} to workflow proposal`);
+      add.textContent = this.draftNames.includes(tool.name)
+        ? "Added to proposal"
+        : "Add as proposal";
+      details.append(status, confidence, evidence, schemaPreview, add);
       card.append(head, details);
       list.append(card);
     }
@@ -3275,6 +3576,23 @@ export class HostedStudio {
     const list = element<HTMLElement>(this.documentValue, "discovery-list");
     list.replaceChildren();
     const discoveredTools = this.analysisRequested ? this.targetTools : [];
+    const legendNote = this.documentValue.querySelector<HTMLElement>(
+      ".discovery-legend .legend-item:nth-child(2) span:last-child",
+    );
+    if (legendNote)
+      legendNote.textContent =
+        "Proposed from page evidence; may be composed, never executed here";
+    const accessNote = optionalElement<HTMLElement>(
+      this.documentValue,
+      "discovery-list",
+    )?.parentElement?.querySelector<HTMLElement>(
+      ".library-access-note span:last-child",
+    );
+    if (accessNote)
+      accessNote.textContent =
+        this.targetScope === "external"
+          ? "Drag inferred tools to draft a potential workflow"
+          : "Drag native or inferred tools to the workflow canvas";
     for (const tool of discoveredTools) {
       const isNative = discoveryProvenance(tool) === "native";
       const card = this.documentValue.createElement("article");
@@ -3282,28 +3600,30 @@ export class HostedStudio {
       card.dataset.name = tool.name;
       card.dataset.classification = isNative ? "native" : "inferred";
       card.dataset.provenance = isNative ? "native" : "inferred";
-      // Keep the card's controls clickable. The dedicated handle owns native
-      // HTML5 dragging, while pointer fallback uses the same handle.
-      card.draggable = false;
+      card.dataset.source = tool.source ?? "unknown";
+      card.dataset.draggable = "true";
+      // The card is an HTML5 drag source, while the dedicated handle also
+      // provides a precise pointer/touch target that leaves controls usable.
+      card.draggable = true;
       card.classList.toggle("is-selected", this.selectedNames.has(tool.name));
       const head = this.documentValue.createElement("div");
       head.className = "discovery-card-head";
-      if (isNative) {
-        const handle = this.documentValue.createElement("span");
-        handle.className = "tool-drag-handle";
-        handle.dataset.dragHandle = "true";
-        handle.draggable = true;
-        handle.setAttribute("aria-hidden", "true");
-        handle.title = "Drag this native tool to the workflow";
-        handle.textContent = "⠿";
-        head.append(handle);
-      }
+      const handle = this.documentValue.createElement("span");
+      handle.className = "tool-drag-handle";
+      handle.dataset.dragHandle = "true";
+      handle.draggable = true;
+      handle.setAttribute("aria-hidden", "true");
+      handle.title = isNative
+        ? "Drag this native tool to the workflow"
+        : "Drag this inferred tool to the workflow as a proposal";
+      handle.textContent = "⠿";
+      head.append(handle);
       const checkbox = this.documentValue.createElement("input");
       checkbox.className = "discovery-check";
       checkbox.type = "checkbox";
       checkbox.checked = this.selectedNames.has(tool.name);
       checkbox.dataset.name = tool.name;
-      checkbox.disabled = !isNative;
+      checkbox.disabled = false;
       checkbox.setAttribute("aria-label", `Select ${tool.name}`);
       const title = this.documentValue.createElement("div");
       title.className = "discovery-card-title";
@@ -3357,13 +3677,13 @@ export class HostedStudio {
       add.className = "button button-quiet add-primitive";
       add.dataset.action = "add-to-workflow";
       add.dataset.name = tool.name;
-      add.disabled = !isNative || this.draftNames.includes(tool.name);
+      add.disabled = this.draftNames.includes(tool.name);
       add.setAttribute("aria-label", `Add ${tool.name} to workflow`);
       add.textContent = this.draftNames.includes(tool.name)
         ? "Added to workflow"
         : isNative
           ? "Add to workflow"
-          : "Inferred · inspect only";
+          : "Add as proposal";
       details.append(
         effect,
         schema,
@@ -3416,15 +3736,26 @@ export class HostedStudio {
       const placeholder = this.documentValue.createElement("li");
       placeholder.className = "flow-placeholder";
       placeholder.textContent =
-        "Drag a native tool from the discovery library to start.";
+        this.targetScope === "external"
+          ? "Drag an inferred tool here to draft a proposal."
+          : "Drag a discovered tool from the library to start.";
       flow.append(placeholder);
     } else {
       for (const [index, name] of this.draftNames.entries()) {
         const row = this.documentValue.createElement("li");
-        row.className = "flow-discovery";
+        const descriptor = this.workflowToolDescriptors().find(
+          (tool) => tool.name === name,
+        );
+        const isNative = descriptor
+          ? discoveryProvenance(descriptor) === "native"
+          : false;
+        row.className = `flow-discovery${isNative ? "" : " is-inferred"}`;
         row.draggable = true;
         row.dataset.flowIndex = String(index);
         row.dataset.name = name;
+        row.dataset.classification = isNative ? "native" : "inferred";
+        row.dataset.provenance = isNative ? "native" : "inferred";
+        row.dataset.source = descriptor?.source ?? "unknown";
         const handle = this.documentValue.createElement("span");
         handle.className = "flow-drag-handle";
         handle.dataset.dragHandle = "true";
@@ -3471,11 +3802,23 @@ export class HostedStudio {
         flow.append(row);
       }
     }
+    const callout = optionalElement<HTMLElement>(
+      this.documentValue,
+      "compose-flow",
+    )?.parentElement?.querySelector<HTMLElement>(
+      ".dropzone-callout span:last-child",
+    );
+    if (callout)
+      callout.textContent =
+        this.targetScope === "external"
+          ? "Drop a tool to add a proposal step"
+          : "Drop a discovered tool to add a step";
     element<HTMLElement>(this.documentValue, "flow-count").textContent =
       `${this.draftNames.length} step${this.draftNames.length === 1 ? "" : "s"}`;
+    const descriptors = this.workflowToolDescriptors();
     element<HTMLElement>(this.documentValue, "tool-schema").textContent = text(
       asJsonValue(
-        workflowInputSchema(this.targetId, this.draftNames, this.targetTools),
+        workflowInputSchema(this.targetId, this.draftNames, descriptors),
       ),
     );
   }

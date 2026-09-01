@@ -217,6 +217,50 @@ async function inspectModelContextTool(
   }, name);
 }
 
+async function invokeModelContextTool(
+  surface: Page | Frame,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  return surface.evaluate(
+    async ({ requestedName, input }) => {
+      const context =
+        (
+          navigator as Navigator & {
+            modelContext?: {
+              getTools?: () => unknown;
+              executeTool?: (tool: unknown, value: unknown) => unknown;
+            };
+          }
+        ).modelContext ??
+        (
+          document as Document & {
+            modelContext?: {
+              getTools?: () => unknown;
+              executeTool?: (tool: unknown, value: unknown) => unknown;
+            };
+          }
+        ).modelContext;
+      const tools = context?.getTools?.();
+      const tool = Array.isArray(tools)
+        ? tools.find(
+            (candidate) =>
+              candidate &&
+              typeof candidate === "object" &&
+              (candidate as ModelContextTool).name === requestedName,
+          )
+        : undefined;
+      const execute = (tool as ModelContextTool | undefined)?.execute;
+      if (!tool || typeof execute !== "function")
+        throw new Error(`WebMCP tool ${requestedName} is not executable.`);
+      if (typeof context?.executeTool === "function")
+        return await context.executeTool(tool, JSON.stringify(input));
+      return await execute(input);
+    },
+    { requestedName: name, input: args },
+  );
+}
+
 async function hostInvocations(surface: Page | Frame): Promise<string[]> {
   return surface.evaluate(() => window.__webmcpTestHost?.invocations ?? []);
 }
@@ -262,7 +306,7 @@ async function discoverSite(page: Page, url: string): Promise<void> {
 function discoveryCard(page: Page, name: string) {
   return page
     .locator(
-      `#discovery-list .discovery-card[data-name="${name}"], #discovery-list .discovery-card[data-tool-name="${name}"]`,
+      `#discovery-list .discovery-card[data-name="${name}"], #discovery-list .discovery-card[data-tool-name="${name}"], #potential-list .discovery-card[data-name="${name}"], #potential-list .discovery-card[data-tool-name="${name}"]`,
     )
     .first();
 }
@@ -346,6 +390,110 @@ test.afterAll(async () => {
 test.describe("hosted WebMCP Studio builder", () => {
   test.describe.configure({ mode: "serial", timeout: 60_000 });
 
+  test("exposes invokable Studio WebMCP controls on the top-level page", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+    });
+    await installSyntheticNativeHost(context);
+    const page = await context.newPage();
+    try {
+      await page.goto(`${hostedBaseUrl}/`, { waitUntil: "domcontentloaded" });
+      for (const name of [
+        "discover_site_tools",
+        "inspect_tool",
+        "compose_workflow",
+        "generate_tool",
+        "list_generated_tools",
+        "execute_workflow",
+      ])
+        await waitForModelContextTool(page, name);
+      await waitForModelContextTool(page, "search_products");
+
+      const discovered = await invokeModelContextTool(
+        page,
+        "discover_site_tools",
+        { target: "commerce" },
+      );
+      expect(discovered).toMatchObject({
+        target: { id: "commerce" },
+        tools: expect.arrayContaining([
+          expect.objectContaining({ name: "search_products" }),
+          expect.objectContaining({ name: "add_to_cart" }),
+        ]),
+      });
+
+      const inspected = await invokeModelContextTool(page, "inspect_tool", {
+        name: "search_products",
+      });
+      expect(inspected).toMatchObject({
+        found: true,
+        provenance: "native",
+        tool: { name: "search_products" },
+      });
+
+      const primitiveNames = [
+        "search_products",
+        "filter_products",
+        "get_product",
+        "add_to_cart",
+      ];
+      const composed = await invokeModelContextTool(page, "compose_workflow", {
+        primitiveNames,
+      });
+      expect(composed).toMatchObject({ valid: true, primitiveNames });
+
+      const generated = await invokeModelContextTool(page, "generate_tool", {
+        name: "agent_buy_best_product",
+        description: "Find the best matching product and add it to the cart.",
+        primitiveNames,
+      });
+      expect(generated).toMatchObject({
+        success: true,
+        native: true,
+        name: "agent_buy_best_product",
+      });
+
+      const listed = await invokeModelContextTool(
+        page,
+        "list_generated_tools",
+        {},
+      );
+      expect(listed).toMatchObject({
+        tools: [expect.objectContaining({ name: "agent_buy_best_product" })],
+      });
+
+      const executed = await invokeModelContextTool(page, "execute_workflow", {
+        name: "agent_buy_best_product",
+        input: { requirements: "keyboard", max_price: 200, quantity: 1 },
+      });
+      expect(executed).toMatchObject({
+        success: true,
+        toolName: "agent_buy_best_product",
+        stateChanged: true,
+      });
+
+      const target = await targetFrameFor(page, "/targets/commerce.html");
+      await expect(target.locator("#cart-count")).toHaveText("1");
+      await expect(target.locator("#details-name")).toContainText(/keyboard/i);
+      await expect
+        .poll(() => hostExecuteToolCalls(page))
+        .toEqual(
+          expect.arrayContaining([
+            "discover_site_tools",
+            "inspect_tool",
+            "compose_workflow",
+            "generate_tool",
+            "list_generated_tools",
+            "execute_workflow",
+          ]),
+        );
+    } finally {
+      await context.close();
+    }
+  });
+
   test("discovers, composes, injects, and tests a generated page tool without an extension", async ({
     browser,
   }) => {
@@ -398,6 +546,27 @@ test.describe("hosted WebMCP Studio builder", () => {
       const target = await targetFrameFor(page, "/targets/commerce.html");
       await expect(page.locator("#target-site-name")).toContainText(
         "Northstar Supply",
+      );
+
+      // The selected page's native primitives are mirrored onto Studio's own
+      // WebMCP context so an agent can invoke them without reaching into the
+      // iframe directly.
+      await waitForModelContextTool(page, "search_products");
+      const directResult = await invokeModelContextTool(
+        page,
+        "search_products",
+        {
+          query: "keyboard",
+        },
+      );
+      expect(directResult).toMatchObject({
+        ok: true,
+        query: "keyboard",
+        stateChanged: true,
+      });
+      await expect(target.locator("#status")).toContainText(/Found 1 product/i);
+      await expect(target.locator("#result-count")).toHaveText(
+        /1 (?:match|product)/i,
       );
 
       for (const name of primitiveNames) {
@@ -477,6 +646,101 @@ test.describe("hosted WebMCP Studio builder", () => {
       await expect(page.locator("#target-preview-label")).toHaveText(
         "external preview",
       );
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("drags inferred external tools into a potential workflow proposal", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+    });
+    const page = await context.newPage();
+    await page.route("**/api/analyze-external", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: "inspected",
+          url: "https://example.com/catalog",
+          title: "Example Catalog",
+          tools: [
+            {
+              name: "search_content",
+              description: "Potentially search the visible catalog.",
+              inputSchema: {
+                type: "object",
+                properties: { query: { type: "string" } },
+                required: ["query"],
+                additionalProperties: false,
+              },
+              annotations: { readOnlyHint: true },
+              source: "dom",
+              confidence: 0.76,
+              evidence: [
+                {
+                  type: "dom",
+                  selector: "#search-form",
+                  note: "Observed a search-like field.",
+                },
+              ],
+            },
+            {
+              name: "view_cart",
+              description: "Potentially open the visible cart.",
+              inputSchema: {
+                type: "object",
+                properties: {},
+                additionalProperties: false,
+              },
+              annotations: { readOnlyHint: true },
+              source: "dom",
+              confidence: 0.7,
+              evidence: [
+                {
+                  type: "dom",
+                  selector: "#cart-link",
+                  note: "Observed a cart link.",
+                },
+              ],
+            },
+          ],
+          frame: {
+            status: "blocked",
+            reason: "The site only allows framing by its own origin.",
+          },
+          note: "Fetched page evidence produced potential tools.",
+          previewHtml:
+            '<html><body><h1>Example Catalog</h1><form id="search-form"><input name="query" type="search"></form></body></html>',
+        }),
+      });
+    });
+    try {
+      await page.goto(`${hostedBaseUrl}/`, { waitUntil: "domcontentloaded" });
+      await page.locator("#site-url").fill("https://example.com/catalog");
+      await page.locator("#discover-button").click();
+
+      await expect(page.locator("#potential-list .discovery-card")).toHaveCount(
+        2,
+      );
+      const inferred = discoveryCard(page, "search_content");
+      await assertClassification(inferred, "inferred");
+      await expect(inferred).toHaveAttribute("draggable", "true");
+      await expect(inferred.locator("[data-drag-handle]")).toBeVisible();
+
+      await dragPrimitive(page, "search_content");
+      await expect(page.locator("#compose-flow .flow-discovery")).toHaveCount(
+        1,
+      );
+      await expect(
+        page.locator("#compose-flow .flow-discovery[data-name=search_content]"),
+      ).toHaveAttribute("data-provenance", "inferred");
+      await expect(page.locator("#composer-message")).toContainText(
+        /Added search_content to the workflow/i,
+      );
+      await expect(page.locator("#inject-button")).toBeDisabled();
     } finally {
       await context.close();
     }

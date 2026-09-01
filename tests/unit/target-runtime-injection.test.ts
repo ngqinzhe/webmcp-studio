@@ -471,6 +471,81 @@ describe("hosted target runtime page injection contract", () => {
     );
   });
 
+  it("does not claim or remove a pre-existing native tool", async () => {
+    const harness = createHarness();
+    activeHarnesses.push(harness);
+    const host = createNativeHost();
+    const existing: NativeRegisteredTool = {
+      name: "search_products",
+      description: "Owned by the host before Studio loaded.",
+      inputSchema: objectSchema,
+      annotations: {},
+      execute: () => ({ owner: "host" }),
+    };
+    host.tools.set(existing.name, existing);
+
+    const runtime = new TargetRuntime({
+      target,
+      document: harness.targetDom.window.document,
+      pageWindow: harness.targetWindow,
+      parentWindow: harness.parentWindow,
+      modelContext: host.modelContext,
+    });
+    runtime.addTool(registration("search_products"));
+    await runtime.start();
+
+    expect(host.registerTool).not.toHaveBeenCalled();
+    expect(host.tools.get(existing.name)).toBe(existing);
+    runtime.stop();
+    expect(host.tools.get(existing.name)).toBe(existing);
+  });
+
+  it("does not publish a delayed registration after the runtime stops", async () => {
+    const harness = createHarness();
+    activeHarnesses.push(harness);
+    const tools = new Map<string, NativeRegisteredTool>();
+    let release: ((value: boolean) => void) | undefined;
+    const registerTool = vi.fn(
+      (tool: NativeRegisteredTool, options?: { signal?: AbortSignal }) => {
+        tools.set(tool.name, tool);
+        options?.signal?.addEventListener(
+          "abort",
+          () => tools.delete(tool.name),
+          { once: true },
+        );
+        return new Promise<boolean>((resolve) => {
+          release = resolve;
+        });
+      },
+    );
+    const host: NativeModelContext = {
+      registerTool,
+      unregisterTool: (name) => tools.delete(name),
+      getTools: () => Array.from(tools.values()),
+    };
+    const runtime = new TargetRuntime({
+      target,
+      document: harness.targetDom.window.document,
+      pageWindow: harness.targetWindow,
+      parentWindow: harness.parentWindow,
+      modelContext: host,
+    });
+    runtime.addTool(registration("search_products"));
+
+    const started = runtime.start();
+    await settleMessage();
+    expect(registerTool).toHaveBeenCalledTimes(1);
+    runtime.stop();
+    release?.(true);
+    await started;
+
+    expect(tools.has("search_products")).toBe(false);
+    expect(postedOfType(harness, "target-ready")).toBeUndefined();
+    await expect(runtime.invoke("search_products", {})).rejects.toMatchObject({
+      code: "runtime_stopped",
+    });
+  });
+
   it("rejects duplicate target registrations and reports unknown tools", async () => {
     const harness = createHarness();
     activeHarnesses.push(harness);

@@ -699,6 +699,27 @@ function collectNativeToolNames(
   }
 }
 
+/**
+ * Check the host inventory before claiming a native tool name.  A host may
+ * expose tool records directly, or nest them inside an inventory response;
+ * the recursive collector handles both shapes without executing anything.
+ */
+export async function nativeModelContextHasTool(
+  context: NativeModelContext,
+  name: string,
+): Promise<boolean> {
+  if (typeof context.getTools !== "function") return false;
+  try {
+    const inventory = context.getTools();
+    const value = isPromiseLike(inventory) ? await inventory : inventory;
+    const names = new Set<string>();
+    collectNativeToolNames(value, names);
+    return names.has(name.trim());
+  } catch {
+    return false;
+  }
+}
+
 function acceptedNativeRegistration(value: unknown): boolean {
   if (value === false) return false;
   return !(isRecord(value) && value.registered === false);
@@ -984,6 +1005,7 @@ export class TargetRuntime {
   private readonly modelContext: NativeModelContext | null;
   private readonly tools = new Map<string, TargetToolRegistration>();
   private readonly generatedTools = new Map<string, GeneratedToolState>();
+  private readonly nativePrimitiveRegistrations = new Set<string>();
   private readonly pendingGeneratedCalls = new Map<
     string,
     PendingGeneratedCall
@@ -994,6 +1016,7 @@ export class TargetRuntime {
   private readonly generatedCallTimeoutMs: number;
   private readonly messageListener: (event: MessageEvent<unknown>) => void;
   private started = false;
+  private stopped = false;
   private runtimeMode: TargetRuntimeMode = "preview";
 
   constructor(private readonly options: TargetRuntimeOptions) {
@@ -1058,21 +1081,27 @@ export class TargetRuntime {
   }
 
   async start(): Promise<void> {
-    if (this.started) return;
+    if (this.started || this.stopped) return;
     this.started = true;
     this.pageWindow.addEventListener("message", this.messageListener);
 
     let nativeCount = 0;
     for (const tool of this.tools.values()) {
       if (!this.modelContext) continue;
+      if (await nativeModelContextHasTool(this.modelContext, tool.name))
+        continue;
       try {
         const registration = await registerNativeModelTool(
           this.modelContext,
           toNativeWebMcpTool(tool, (args) => this.invokeLocal(tool.name, args)),
           { signal: this.abortController.signal },
         );
-        if (!registration.registered || this.abortController.signal.aborted)
+        if (!registration.registered) continue;
+        if (this.abortController.signal.aborted || this.stopped) {
+          this.unregisterNativeTool(tool.name);
           continue;
+        }
+        this.nativePrimitiveRegistrations.add(tool.name);
         nativeCount += 1;
       } catch {
         // A target can still be exercised through the explicit parent bridge.
@@ -1087,10 +1116,14 @@ export class TargetRuntime {
   }
 
   stop(): void {
-    if (!this.started) return;
+    if (!this.started || this.stopped) return;
     this.started = false;
+    this.stopped = true;
     this.abortController.abort();
     this.pageWindow.removeEventListener("message", this.messageListener);
+    for (const name of this.nativePrimitiveRegistrations)
+      this.unregisterNativeTool(name);
+    this.nativePrimitiveRegistrations.clear();
     const nativeContext = this.generatedModelContext();
     for (const [name, generated] of this.generatedTools) {
       generated.abortController.abort();
@@ -1287,6 +1320,17 @@ export class TargetRuntime {
     return nativeModelContext(this.documentValue);
   }
 
+  private unregisterNativeTool(name: string): void {
+    const context = this.generatedModelContext();
+    if (!context?.unregisterTool) return;
+    try {
+      void Promise.resolve(context.unregisterTool(name)).catch(() => undefined);
+    } catch {
+      // AbortSignal cleanup remains the fallback for hosts without explicit
+      // removal.
+    }
+  }
+
   private generatedRegistrationResult(
     toolName: string,
     registered: boolean,
@@ -1306,16 +1350,7 @@ export class TargetRuntime {
     context: NativeModelContext,
     name: string,
   ): Promise<boolean> {
-    if (!context.getTools) return false;
-    try {
-      const inventory = context.getTools();
-      const value = isPromiseLike(inventory) ? await inventory : inventory;
-      const names = new Set<string>();
-      collectNativeToolNames(value, names);
-      return names.has(name);
-    } catch {
-      return false;
-    }
+    return nativeModelContextHasTool(context, name);
   }
 
   private postTargetReady(): void {
@@ -1492,6 +1527,11 @@ export class TargetRuntime {
   }
 
   private async invokeLocal(name: string, args: unknown): Promise<JsonValue> {
+    if (this.stopped || this.abortController.signal.aborted)
+      throw new TargetRuntimeError(
+        "runtime_stopped",
+        "The target runtime is stopped.",
+      );
     const tool = this.tools.get(name);
     if (!tool)
       throw new TargetRuntimeError(

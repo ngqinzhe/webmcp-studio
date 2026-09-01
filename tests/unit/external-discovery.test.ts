@@ -6,6 +6,249 @@ import {
 } from "../../scripts/external-discovery.mjs";
 
 describe("external discovery", () => {
+  test("discovers semantic commerce tools from production-like markup", () => {
+    const result = analyzeExternalHtml({
+      url: "https://shop.example/catalog",
+      html: `
+        <html>
+          <head><title>Acme Store</title></head>
+          <body>
+            <header>
+              <form id="site-search" class="search-form" aria-label="Search products">
+                <label for="search">Search products</label>
+                <input id="search" name="q" type="search" placeholder="Search products" />
+                <button type="submit" aria-label="Search products">Search</button>
+              </form>
+              <a href="/cart" aria-label="Cart (0)">Cart</a>
+            </header>
+            <aside>
+              <form id="filters" class="product-filters" aria-label="Filter products">
+                <label for="category">Category</label>
+                <select id="category" name="category">
+                  <option value="all">All</option>
+                  <option value="keyboards">Keyboards</option>
+                </select>
+                <label for="max-price">Maximum price</label>
+                <input id="max-price" name="max_price" type="range" min="0" max="500" />
+                <label><input name="in_stock" type="checkbox" /> In stock</label>
+                <label for="sort">Sort by</label>
+                <select id="sort" name="sort_by">
+                  <option value="rating">Top rated</option>
+                  <option value="price">Price</option>
+                </select>
+                <button type="submit" data-action="apply-filters">Apply filters</button>
+              </form>
+            </aside>
+            <main class="product-grid">
+              <article class="product-card" data-product-id="product-1">
+                <h2>Atlas Mechanical Keyboard</h2>
+                <a href="/products/product-1" aria-label="View product details">Details</a>
+                <button type="button" data-action="add_to_cart" aria-label="Add Atlas to cart">Add</button>
+                <button type="button" aria-label="Add Atlas to wishlist">Save</button>
+              </article>
+              <article class="product-card" data-product-id="product-2">
+                <h2>Orbit Desk Lamp</h2>
+                <a href="/products/product-2" aria-label="View product details">Details</a>
+                <button type="button" aria-label="Add Orbit to cart">Add</button>
+              </article>
+            </main>
+            <nav aria-label="Catalog pagination">
+              <button type="button" aria-label="Next page">Next</button>
+            </nav>
+          </body>
+        </html>
+      `,
+    });
+
+    const names = result.tools.map((tool) => tool.name);
+    expect(result.status).toBe("inspected");
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "search_products",
+        "filter_products",
+        "change_sort",
+        "view_cart",
+        "get_product",
+        "add_to_cart",
+        "view_wishlist",
+        "next_page",
+      ]),
+    );
+    expect(names.length).toBeGreaterThanOrEqual(8);
+    expect(
+      result.tools.find((tool) => tool.name === "search_products")?.inputSchema,
+    ).toMatchObject({
+      properties: { q: { type: "string" } },
+      required: ["q"],
+    });
+    expect(
+      result.tools.find((tool) => tool.name === "filter_products")?.inputSchema,
+    ).toMatchObject({
+      properties: {
+        category: { type: "string", enum: ["all", "keyboards"] },
+        max_price: { type: "number", minimum: 0, maximum: 500 },
+        in_stock: { type: "boolean" },
+      },
+    });
+    expect(
+      result.tools.find((tool) => tool.name === "add_to_cart")?.inputSchema,
+    ).toMatchObject({
+      properties: {
+        productId: { type: "string" },
+        quantity: { type: "integer", minimum: 1 },
+      },
+      required: ["productId"],
+    });
+    expect(
+      result.tools.find((tool) => tool.name === "get_product")?.evidence,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "dom",
+          selector: expect.stringContaining("product-1"),
+        }),
+      ]),
+    );
+  });
+
+  test("discovers travel search and option tools from ARIA and card evidence", () => {
+    const result = analyzeExternalHtml({
+      url: "https://travel.example/flights",
+      html: `
+        <html>
+          <head><title>Skyline Flights</title></head>
+          <body>
+            <form id="flight-search" class="booking-search" aria-label="Search flights">
+              <div role="group" aria-label="Trip details">
+                <input name="origin" aria-label="From" placeholder="Singapore" required />
+                <input name="destination" aria-label="To" placeholder="Tokyo" required />
+              </div>
+              <input name="depart" type="date" aria-label="Departure date" required />
+              <select name="passengers" aria-label="Passengers">
+                <option value="1">1 passenger</option>
+                <option value="2">2 passengers</option>
+              </select>
+              <button type="submit" aria-label="Search available flights">Search</button>
+            </form>
+            <section aria-label="Available flight options">
+              <article class="flight-card" data-option-id="flight-123">
+                <h2>Singapore to Tokyo</h2>
+                <button type="button" role="button" data-action="select-option">Select flight</button>
+                <a href="/flights/flight-123" aria-label="View flight details">Details</a>
+              </article>
+            </section>
+            <a href="/itinerary" aria-label="View itinerary">Itinerary</a>
+          </body>
+        </html>
+      `,
+    });
+
+    const names = result.tools.map((tool) => tool.name);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "search_options",
+        "select_option",
+        "get_details",
+        "view_itinerary",
+      ]),
+    );
+    expect(
+      result.tools.find((tool) => tool.name === "search_options")?.inputSchema,
+    ).toMatchObject({
+      properties: {
+        origin: { type: "string" },
+        destination: { type: "string" },
+        depart: { type: "string", format: "date" },
+        passengers: { type: "string", enum: ["1", "2"] },
+      },
+      required: expect.arrayContaining(["origin", "destination", "depart"]),
+    });
+    expect(
+      result.tools.find((tool) => tool.name === "select_option")?.inputSchema,
+    ).toMatchObject({
+      properties: { optionId: { type: "string" } },
+      required: ["optionId"],
+    });
+  });
+
+  test("reads multiple inline native declarations without executing page code", () => {
+    const result = analyzeExternalHtml({
+      url: "https://native.example/catalog",
+      html: `
+        <html>
+          <head><title>Native catalog</title></head>
+          <body>
+            <script type="module">
+              const ignored = "navigator.modelContext.provideTool({ name: 'fake' })";
+              window.navigator.modelContext.provideTool({
+                name: "search_products",
+                description: "Search the product catalog.",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    query: { type: "string", minLength: 1 },
+                    limit: { type: "integer", minimum: 1 }
+                  },
+                  required: ["query"]
+                },
+                execute: async (input) => fetch('/search', { body: JSON.stringify(input) })
+              });
+              document.modelContext.registerTool({
+                name: "view_cart",
+                description: "View the cart.",
+                inputSchema: { type: "object", properties: {} }
+              });
+            </script>
+          </body>
+        </html>
+      `,
+    });
+
+    expect(result.tools.map((tool) => tool.name)).toEqual([
+      "search_products",
+      "view_cart",
+    ]);
+    expect(result.tools.every((tool) => tool.source === "manual")).toBe(true);
+    expect(result.tools[0]?.inputSchema).toMatchObject({
+      properties: {
+        query: { type: "string" },
+        limit: { type: "integer" },
+      },
+      required: ["query"],
+    });
+    expect(result.tools[0]?.evidence?.[0]).toMatchObject({
+      type: "manual",
+      selector: "script",
+    });
+  });
+
+  test("uses ARIA and data attributes for card actions without running page code", () => {
+    const result = analyzeExternalHtml({
+      url: "https://shop.example/products",
+      html: `
+        <main>
+          <div class="product-card" data-product-id="p-7">
+            <span aria-label="Wireless keyboard">Wireless keyboard</span>
+            <div role="button" aria-label="View product details">Open</div>
+            <button data-testid="add-to-cart-button">Add</button>
+          </div>
+          <button aria-label="Load more results">More</button>
+        </main>
+      `,
+    });
+
+    expect(result.tools.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(["get_product", "add_to_cart", "next_page"]),
+    );
+    expect(
+      result.tools.find((tool) => tool.name === "get_product")?.evidence,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ selector: expect.stringContaining("p-7") }),
+      ]),
+    );
+  });
+
   test("derives inferred tools from fetched page evidence", () => {
     const result = analyzeExternalHtml({
       url: "https://shop.example/catalog",
