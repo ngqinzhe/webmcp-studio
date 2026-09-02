@@ -16,7 +16,10 @@
     "test:e2e": "npm run build:extension && playwright test",
     "demo": "node scripts/serve-demo.mjs",
     "spike:native": "node spikes/native-webmcp/serve.mjs",
-    "format:check": "prettier --check . --ignore-path .prettierignore"
+    "format:check": "prettier --check . --ignore-path .prettierignore",
+    "video:capture": "node scripts/video/capture-demo.mjs",
+    "video:render": "node scripts/video/render-video.mjs",
+    "video:build": "npm run build && npm run video:capture && npm run video:render"
   },
   "devDependencies": {
     "@playwright/test": "^1.51.0",
